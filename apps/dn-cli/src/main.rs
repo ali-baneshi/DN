@@ -188,9 +188,13 @@ fn render_markdown(report: &dn_runtime::ScanReport) -> String {
         found_any = true;
         output.push_str(&format!("### `{}`\n", file.path));
         for finding in &file.findings {
+            let line_suffix = finding
+                .line
+                .map(|line| format!(" line {}", line))
+                .unwrap_or_default();
             output.push_str(&format!(
-                "- **{}** [{} / {}] {}\n",
-                finding.severity, finding.origin, finding.rule, finding.message
+                "- **{}** [{} / {}{}] {}\n",
+                finding.severity, finding.origin, finding.rule, line_suffix, finding.message
             ));
         }
         output.push('\n');
@@ -442,10 +446,79 @@ fn doctor_python_worker(root: &Path) -> Diagnostic {
     }
 }
 
+fn doctor_python_runtime() -> Diagnostic {
+    let candidates = ["python3", "python"];
+    for candidate in candidates {
+        let output = process::Command::new(candidate).arg("--version").output();
+        if let Ok(output) = output {
+            if output.status.success() {
+                let version = String::from_utf8_lossy(if output.stdout.is_empty() {
+                    &output.stderr
+                } else {
+                    &output.stdout
+                })
+                .trim()
+                .to_string();
+                return Diagnostic {
+                    level: "info".to_string(),
+                    source: "doctor".to_string(),
+                    code: "python-runtime-found".to_string(),
+                    message: format!("found usable Python runtime: {candidate} ({version})"),
+                    path: None,
+                };
+            }
+        }
+    }
+
+    Diagnostic {
+        level: "warning".to_string(),
+        source: "doctor".to_string(),
+        code: "python-runtime-missing".to_string(),
+        message: "python runtime was not found on PATH; python worker cannot start".to_string(),
+        path: None,
+    }
+}
+
+fn doctor_profile_examples(root: &Path) -> Diagnostic {
+    let examples_dir = root.join("examples/profiles");
+    let count = std::fs::read_dir(&examples_dir)
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(Result::ok))
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| matches!(ext, "toml" | "yml" | "yaml"))
+        })
+        .count();
+
+    if count == 0 {
+        Diagnostic {
+            level: "warning".to_string(),
+            source: "doctor".to_string(),
+            code: "profile-examples-missing".to_string(),
+            message: "tracked example profiles were not found".to_string(),
+            path: Some(examples_dir.display().to_string()),
+        }
+    } else {
+        Diagnostic {
+            level: "info".to_string(),
+            source: "doctor".to_string(),
+            code: "profile-examples-found".to_string(),
+            message: format!("found {count} tracked example profile(s) for customization"),
+            path: Some(examples_dir.display().to_string()),
+        }
+    }
+}
+
 fn run_doctor(command: DoctorCommand) {
     let root = Path::new(&command.root);
     let mut diagnostics = Vec::new();
     diagnostics.push(doctor_python_worker(root));
+    diagnostics.push(doctor_python_runtime());
+    diagnostics.push(doctor_profile_examples(root));
     let profile_dir = root.join(".dn/profiles");
     diagnostics.push(Diagnostic {
         level: if profile_dir.exists() {
@@ -463,10 +536,12 @@ fn run_doctor(command: DoctorCommand) {
         path: Some(profile_dir.display().to_string()),
     });
     let has_errors = diagnostics.iter().any(|d| d.level == "error");
+    let warnings = diagnostics.iter().filter(|d| d.level == "warning").count();
     if command.json {
-        print_json(
-            &serde_json::json!({"status": if has_errors { "failing" } else { "ok" }, "diagnostics": diagnostics}),
-        );
+        print_json(&serde_json::json!({
+            "status": if has_errors { "failing" } else if warnings > 0 { "warning" } else { "ok" },
+            "diagnostics": diagnostics
+        }));
     } else {
         for diagnostic in &diagnostics {
             println!(

@@ -85,6 +85,8 @@ Each finding contains:
 - `source` optional
 - `origin` (`deterministic`, `worker`, `provider`)
 
+Local deterministic findings may also include `line` when the scanner can identify a concrete source line.
+
 ## Text output
 
 Text output is summary-oriented and stable enough for human logs, but JSON is the compatibility surface for automation.

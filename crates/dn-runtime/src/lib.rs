@@ -601,15 +601,35 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
             let mut profile = base;
             profile.name = "security".to_string();
             profile.description = "Security-sensitive review profile".to_string();
-            profile
-                .rules
-                .deterministic_rules
-                .push("possible-secret".to_string());
-            profile.rules.suspicious_patterns.push("token".to_string());
+            profile.rules.deterministic_rules = vec![
+                "todo-comment".to_string(),
+                "unsafe-usage".to_string(),
+                "possible-secret".to_string(),
+                "hardcoded-value".to_string(),
+            ];
+            profile.rules.suspicious_patterns = vec![
+                "password".to_string(),
+                "secret".to_string(),
+                "token".to_string(),
+                "api_key".to_string(),
+                "client_secret".to_string(),
+            ];
+            profile.rules.prioritize = vec![
+                "possible-secret".to_string(),
+                "hardcoded-value".to_string(),
+                "unsafe-usage".to_string(),
+            ];
             profile.ai.enabled = true;
             profile.ai.provider = provider::ProviderConfig::Mock {
                 message: "No security finding by AI in this file snippet".to_string(),
             };
+            profile.ai.suspicious_patterns = vec![
+                "password".to_string(),
+                "secret".to_string(),
+                "token".to_string(),
+                "api_key".to_string(),
+                "unsafe".to_string(),
+            ];
             profile.worker.enabled = true;
             Some(profile)
         }
@@ -670,7 +690,12 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                     "possible-secret".to_string(),
                     "hardcoded-value".to_string(),
                 ],
-                suspicious_patterns: vec!["TODO".to_string(), "FIXME".to_string()],
+                suspicious_patterns: vec![
+                    "TODO".to_string(),
+                    "FIXME".to_string(),
+                    "deprecated".to_string(),
+                    "unsafe".to_string(),
+                ],
                 prioritize: vec!["todo-comment".to_string()],
                 min_severity: "info".to_string(),
             },
@@ -681,6 +706,12 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
             p.name = name.to_string();
             p.description = "AI-generated code review profile".to_string();
             p.ai.enabled = true;
+            p.ai.suspicious_patterns = vec![
+                "todo".to_string(),
+                "fixme".to_string(),
+                "unsafe".to_string(),
+                "eval(".to_string(),
+            ];
             p.ai.provider = provider::ProviderConfig::Mock {
                 message:
                     "AI-generated code smell: check for repetitive patterns and naming quality."
@@ -702,6 +733,9 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                     "TODO".to_string(),
                     "FIXME".to_string(),
                     "XXX".to_string(),
+                    "deprecated".to_string(),
+                    "legacy".to_string(),
+                    "unsafe".to_string(),
                 ],
                 prioritize: vec!["deprecated-api".to_string(), "possible-secret".to_string()],
                 min_severity: "low".to_string(),
@@ -734,6 +768,13 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                 enabled: true,
                 max_ai_files: 120,
                 max_content_chars: 8 * 1024,
+                suspicious_patterns: vec![
+                    "password".to_string(),
+                    "secret".to_string(),
+                    "token".to_string(),
+                    "unsafe".to_string(),
+                    "eval(".to_string(),
+                ],
                 ..ProfileAiConfig::default()
             },
             ..base
@@ -763,14 +804,22 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                 deterministic_rules: vec![
                     "todo-comment".to_string(),
                     "possible-secret".to_string(),
+                    "hardcoded-value".to_string(),
                     "unsafe-usage".to_string(),
                 ],
                 suspicious_patterns: vec![
                     "TODO".to_string(),
                     "FIXME".to_string(),
                     "api_key".to_string(),
+                    "password".to_string(),
+                    "secret".to_string(),
+                    "unsafe".to_string(),
                 ],
-                prioritize: vec!["possible-secret".to_string()],
+                prioritize: vec![
+                    "possible-secret".to_string(),
+                    "hardcoded-value".to_string(),
+                    "unsafe-usage".to_string(),
+                ],
                 min_severity: "medium".to_string(),
             },
             ..base
@@ -891,25 +940,6 @@ fn contains_word(content: &str, word: &str) -> bool {
         .any(|w| w.trim_matches(|c: char| !c.is_alphanumeric()) == word)
 }
 
-/// Check if content contains a code keyword (with basic context awareness)
-fn contains_code_keyword(content: &str, keyword: &str) -> bool {
-    let lower = content.to_lowercase();
-    let kw = keyword.to_lowercase();
-    for line in lower.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed.starts_with('*') {
-            continue;
-        }
-        if line
-            .split(|c: char| !c.is_alphanumeric() && c != '_')
-            .any(|token| token == kw)
-        {
-            return true;
-        }
-    }
-    false
-}
-
 fn normalized_code_line(line: &str) -> Option<String> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -939,6 +969,18 @@ fn normalized_code_line(line: &str) -> Option<String> {
     }
 
     Some(before_inline_comment.to_lowercase())
+}
+
+fn line_number_from_index(index: usize) -> u32 {
+    (index + 1).try_into().unwrap_or(u32::MAX)
+}
+
+fn likely_doc_or_demo_line(line: &str) -> bool {
+    let lower = line.to_lowercase();
+    lower.contains("example")
+        || lower.contains("sample")
+        || lower.contains("for example")
+        || lower.contains("demo")
 }
 
 fn looks_like_placeholder_value(value: &str) -> bool {
@@ -1028,40 +1070,89 @@ fn is_quoted_or_literal_secret_value(value: &str) -> bool {
     (quoted || bare_literal) && trimmed.len() >= 4
 }
 
-/// Detect likely secret assignment patterns with placeholder suppression.
-fn has_likely_secret_assignment(content: &str) -> bool {
-    content
-        .lines()
-        .filter_map(normalized_code_line)
-        .any(|line| {
-            let Some((key, value)) = parse_assignment(&line) else {
-                return false;
-            };
-            is_secret_like_key(key)
-                && is_quoted_or_literal_secret_value(value)
-                && !looks_like_placeholder_value(value)
-        })
+fn find_todo_line(content: &str) -> Option<u32> {
+    content.lines().enumerate().find_map(|(index, line)| {
+        let trimmed = line.trim();
+        if (trimmed.starts_with("//")
+            || trimmed.starts_with('#')
+            || trimmed.starts_with('*')
+            || trimmed.starts_with("/*"))
+            && contains_word(trimmed, "TODO")
+        {
+            return Some(line_number_from_index(index));
+        }
+        None
+    })
 }
 
-/// Detect likely hardcoded credential patterns with stricter value checks.
-fn has_likely_hardcoded_credential(content: &str) -> bool {
-    content
-        .lines()
-        .filter_map(normalized_code_line)
-        .any(|line| {
-            let Some((key, value)) = parse_assignment(&line) else {
-                return false;
-            };
-            if !is_secret_like_key(key) || !is_quoted_or_literal_secret_value(value) {
-                return false;
-            }
+fn find_code_keyword_line(content: &str, keyword: &str) -> Option<u32> {
+    let kw = keyword.to_lowercase();
+    for (index, line) in content.lines().enumerate() {
+        let lower = line.to_lowercase();
+        let trimmed = lower.trim();
+        if trimmed.starts_with("//")
+            || trimmed.starts_with('#')
+            || trimmed.starts_with('*')
+            || trimmed.starts_with("/*")
+        {
+            continue;
+        }
+        if lower
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .any(|token| token == kw)
+        {
+            return Some(line_number_from_index(index));
+        }
+    }
+    None
+}
 
-            let normalized_value =
-                value.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | ' '));
-            normalized_value.len() >= 8
-                && !looks_like_placeholder_value(value)
-                && normalized_value.chars().any(|c| c.is_ascii_digit())
-        })
+fn find_secret_assignment_line(content: &str) -> Option<u32> {
+    content.lines().enumerate().find_map(|(index, line)| {
+        if likely_doc_or_demo_line(line) {
+            return None;
+        }
+        let normalized = normalized_code_line(line)?;
+        let (key, value) = parse_assignment(&normalized)?;
+        if is_secret_like_key(key)
+            && is_quoted_or_literal_secret_value(value)
+            && !looks_like_placeholder_value(value)
+        {
+            Some(line_number_from_index(index))
+        } else {
+            None
+        }
+    })
+}
+
+fn find_hardcoded_credential_line(content: &str) -> Option<u32> {
+    content.lines().enumerate().find_map(|(index, line)| {
+        if likely_doc_or_demo_line(line) {
+            return None;
+        }
+        let normalized = normalized_code_line(line)?;
+        let (key, value) = parse_assignment(&normalized)?;
+        if !is_secret_like_key(key) || !is_quoted_or_literal_secret_value(value) {
+            return None;
+        }
+
+        let normalized_value = value.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | ' '));
+        if normalized_value.len() >= 8
+            && !looks_like_placeholder_value(value)
+            && normalized_value.chars().any(|c| c.is_ascii_digit())
+        {
+            Some(line_number_from_index(index))
+        } else {
+            None
+        }
+    })
+}
+
+fn content_matches_suspicious_patterns(content: &str, patterns: &[String]) -> bool {
+    let lower = content.to_lowercase();
+    patterns
+        .iter()
+        .any(|pat| !pat.trim().is_empty() && lower.contains(&pat.to_lowercase()))
 }
 
 fn normalize_severity(severity: &str) -> &str {
@@ -1110,41 +1201,47 @@ fn severity_rank(severity: &str) -> u8 {
 
 fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
     let mut findings = Vec::new();
-    if profile.rules_enabled("todo-comment") && contains_word(content, "TODO") {
-        findings.push(Finding {
-            rule: "todo-comment".to_string(),
-            severity: "info".to_string(),
-            message: "TODO marker found in file content".to_string(),
-            category: Some("maintainability".to_string()),
-            line: None,
-            source: Some("local-rules".to_string()),
-            origin: "deterministic".to_string(),
-        });
+    if profile.rules_enabled("todo-comment") {
+        if let Some(line) = find_todo_line(content) {
+            findings.push(Finding {
+                rule: "todo-comment".to_string(),
+                severity: "info".to_string(),
+                message: "TODO marker found in comment".to_string(),
+                category: Some("maintainability".to_string()),
+                line: Some(line),
+                source: Some("local-rules".to_string()),
+                origin: "deterministic".to_string(),
+            });
+        }
     }
 
     // SECURITY: Use word-boundary matching to reduce false positives on "unsafe" in prose
-    if profile.rules_enabled("unsafe-usage") && contains_code_keyword(content, "unsafe") {
-        findings.push(Finding {
-            rule: "unsafe-usage".to_string(),
-            severity: "high".to_string(),
-            message: "Possible unsafe keyword usage detected (code context)".to_string(),
-            category: Some("safety".to_string()),
-            line: None,
-            source: Some("local-rules".to_string()),
-            origin: "deterministic".to_string(),
-        });
+    if profile.rules_enabled("unsafe-usage") {
+        if let Some(line) = find_code_keyword_line(content, "unsafe") {
+            findings.push(Finding {
+                rule: "unsafe-usage".to_string(),
+                severity: "high".to_string(),
+                message: "Possible unsafe keyword usage detected (code context)".to_string(),
+                category: Some("safety".to_string()),
+                line: Some(line),
+                source: Some("local-rules".to_string()),
+                origin: "deterministic".to_string(),
+            });
+        }
     }
 
-    if profile.rules_enabled("possible-secret") && has_likely_secret_assignment(content) {
-        findings.push(Finding {
-            rule: "possible-secret".to_string(),
-            severity: "high".to_string(),
-            message: "Possible secret or credential assignment detected".to_string(),
-            category: Some("security".to_string()),
-            line: None,
-            source: Some("local-rules".to_string()),
-            origin: "deterministic".to_string(),
-        });
+    if profile.rules_enabled("possible-secret") {
+        if let Some(line) = find_secret_assignment_line(content) {
+            findings.push(Finding {
+                rule: "possible-secret".to_string(),
+                severity: "high".to_string(),
+                message: "Possible secret or credential assignment detected".to_string(),
+                category: Some("security".to_string()),
+                line: Some(line),
+                source: Some("local-rules".to_string()),
+                origin: "deterministic".to_string(),
+            });
+        }
     }
 
     if profile.rules_enabled("large-file") && content.len() > 20 * 1024 {
@@ -1159,16 +1256,18 @@ fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
         });
     }
 
-    if profile.rules_enabled("hardcoded-value") && has_likely_hardcoded_credential(content) {
-        findings.push(Finding {
-            rule: "hardcoded-value".to_string(),
-            severity: "high".to_string(),
-            message: "Possible hardcoded credential or key assignment detected".to_string(),
-            category: Some("security".to_string()),
-            line: None,
-            source: Some("local-rules".to_string()),
-            origin: "deterministic".to_string(),
-        });
+    if profile.rules_enabled("hardcoded-value") {
+        if let Some(line) = find_hardcoded_credential_line(content) {
+            findings.push(Finding {
+                rule: "hardcoded-value".to_string(),
+                severity: "high".to_string(),
+                message: "Possible hardcoded credential or key assignment detected".to_string(),
+                category: Some("security".to_string()),
+                line: Some(line),
+                source: Some("local-rules".to_string()),
+                origin: "deterministic".to_string(),
+            });
+        }
     }
 
     findings
@@ -1328,6 +1427,36 @@ pub fn validate_profile_config(
             "worker-without-patterns",
             format!(
                 "profile {} enables worker analysis without suspicious patterns; worker may never run",
+                profile.name
+            ),
+        ));
+    }
+
+    if profile.ai.enabled
+        && profile.rules.suspicious_patterns.is_empty()
+        && profile.ai.suspicious_patterns.is_empty()
+    {
+        diagnostics.push(diagnostic(
+            "warning",
+            "provider",
+            "provider-without-patterns",
+            format!(
+                "profile {} enables provider analysis without suspicious patterns; provider may never run",
+                profile.name
+            ),
+        ));
+    }
+
+    if profile.ai.enabled
+        && profile.rules.suspicious_patterns.len() < 2
+        && profile.ai.suspicious_patterns.is_empty()
+    {
+        diagnostics.push(diagnostic(
+            "info",
+            "provider",
+            "narrow-provider-patterns",
+            format!(
+                "profile {} uses a very narrow suspicious pattern set; provider coverage may miss relevant files",
                 profile.name
             ),
         ));
@@ -1715,12 +1844,17 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
             Ok(content) => {
                 findings.extend(run_local_rules(&content, &profile));
 
-                let suspicious = profile
-                    .suspicious_patterns
-                    .iter()
-                    .any(|pat| content.to_lowercase().contains(&pat.to_lowercase()));
+                let worker_suspicious =
+                    content_matches_suspicious_patterns(&content, &profile.suspicious_patterns);
+                let provider_patterns = if profile.ai.suspicious_patterns.is_empty() {
+                    &profile.suspicious_patterns
+                } else {
+                    &profile.ai.suspicious_patterns
+                };
+                let provider_suspicious =
+                    content_matches_suspicious_patterns(&content, provider_patterns);
 
-                if profile.worker_enabled && suspicious {
+                if profile.worker_enabled && worker_suspicious {
                     let language_name = language.clone().unwrap_or_else(|| "unknown".to_string());
                     if let Some(registry) = worker_registry.as_mut() {
                         if registry.supports(&language_name) {
@@ -1755,7 +1889,10 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                     }
                 }
 
-                if profile.ai.enabled && ai_files_used < profile.ai.max_ai_files && suspicious {
+                if profile.ai.enabled
+                    && ai_files_used < profile.ai.max_ai_files
+                    && provider_suspicious
+                {
                     match review_engine.analyze_file_if_enabled(
                         &profile.ai,
                         AiRequest {
@@ -2331,30 +2468,32 @@ provider = { type = "ollama", base_url = "https://example.com", model = "demo" }
 
     #[test]
     fn secret_rule_ignores_comment_examples_and_env_indirection() {
-        assert!(!has_likely_secret_assignment(
+        assert!(find_secret_assignment_line(
             r#"
             // password = "example-secret"
             api_key = "${API_KEY}"
             client_secret: "changeme"
             "#
-        ));
+        )
+        .is_none());
     }
 
     #[test]
     fn secret_rule_detects_json_yaml_and_single_quote_assignments() {
-        assert!(has_likely_secret_assignment(
+        assert!(find_secret_assignment_line(
             r#"
             const cfg = { "client_secret": "prod-Secret-9" };
             token: 'real-token-42'
             "#
-        ));
+        )
+        .is_some());
     }
 
     #[test]
     fn hardcoded_rule_requires_more_than_placeholder_tokens() {
-        assert!(!has_likely_hardcoded_credential("token = \"test-token\""));
-        assert!(has_likely_hardcoded_credential(
-            "github_token = \"ghp_1234567890abcdef\""
-        ));
+        assert!(find_hardcoded_credential_line("token = \"test-token\"").is_none());
+        assert!(
+            find_hardcoded_credential_line("github_token = \"ghp_1234567890abcdef\"").is_some()
+        );
     }
 }

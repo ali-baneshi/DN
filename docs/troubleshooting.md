@@ -35,12 +35,14 @@ For `ollama`, only local endpoints are accepted right now. Remote URLs are rejec
 ## Too many false positives
 
 - reduce `rules.suspicious_patterns` in your profile if worker/provider analysis is triggering too broadly
+- if provider review should use a different trigger set, define `[ai].suspicious_patterns` separately from `[rules].suspicious_patterns`
 - prefer `pre-merge` or a trimmed custom profile in CI rather than the broadest local profile
 - remember that obvious placeholders like `example`, `changeme`, and `${TOKEN}` are already suppressed by local secret-like rules
 
 ## Missed suspicious files
 
 - add repository-specific terms to `rules.suspicious_patterns`
+- if provider review needs broader coverage than workers, add `[ai].suspicious_patterns`
 - use a profile that enables the worker and/or provider paths
 - increase `limits.max_file_read_bytes` if important indicators are located after the initial preview window
 
@@ -55,6 +57,11 @@ For `ollama`, only local endpoints are accepted right now. Remote URLs are rejec
 - use `--json` explicitly
 - use `--content` if previews are needed
 - avoid `--summary-only` if you want full `files` entries
+
+## `doctor` reports warnings
+
+- `doctor` is intentionally advisory for missing local profiles, missing example profiles, or missing Python runtimes
+- use it to understand environment readiness before enabling worker-backed profiles in CI or local review
 
 ## `--fail-on` behavior surprises me
 

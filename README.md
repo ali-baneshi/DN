@@ -8,62 +8,79 @@
 [![Markdown](https://img.shields.io/badge/Markdown-reporting-000000?logo=markdown)](https://www.markdownguide.org/)
 [![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI%2Fsmoke%2Fdocs-2088FF?logo=githubactions&logoColor=white)](https://github.com/features/actions)
 
-`dn-kernel` is a terminal-first repository review CLI for scanning source trees and producing structured, repeatable findings.
+`dn-kernel` is a local-first repository review CLI for scanning source trees and producing structured, repeatable findings for maintainers, reviewers, and CI pipelines.
 
-It is built for developers, maintainers, security reviewers, and automation workflows that need a fast local way to inspect a codebase for suspicious patterns, maintainability risks, architecture smells, and profile-driven review signals.
-
-In short: point it at a repository, choose a profile, and get a deterministic review report in text, JSON, or Markdown.
+It sits between ad-hoc grep scripts and heavyweight security/review platforms: fast enough to run locally, explicit enough to trust in automation, and small enough to extend without losing control of the trust boundary.
 
 ## Technology stack
 
 `dn-kernel` is built with and around these technologies:
 
-- `Rust`: core CLI, runtime, scanning engine, diagnostics model, protocol integration
-- `Python`: optional worker-based language analysis extension
-- `TOML` and `YAML`: local and built-in profile configuration formats
-- `JSON`: machine-readable output, worker/provider protocol payloads, schema-oriented automation
-- `Markdown`: human-readable review reports and documentation
+- `Rust`: core CLI, runtime, scanner, diagnostics, report model, worker/provider orchestration
+- `Python`: optional language-aware worker execution path
+- `TOML` and `YAML`: local and inherited profile definitions
+- `JSON`: machine-readable output, protocol payloads, automation contract
+- `Markdown`: human-readable review reporting and handbook-style docs
 - `GitHub Actions`: CI, smoke validation, and docs consistency checks
 
 ## What this tool is
 
-`dn-kernel` is a local-first code review and repository inspection tool.
-It is not a general-purpose SAST platform, not a hosted code scanning service, and not a remote-only AI wrapper.
+`dn-kernel` is a deterministic repository inspection tool with optional integration layers.
 
-Its core value is combining three things in one predictable CLI:
+Its core model has three analysis planes:
 
-- deterministic local scanning
-- optional language-aware worker analysis
-- optional provider-backed review flows
+- deterministic local rules that always run on scanned text files
+- worker-based analysis for suspicious files in supported languages
+- provider-backed review for opt-in AI-style or model-driven passes
 
-That makes it useful when you want a review artifact that is:
+The output is designed to be:
 
-- fast to generate
-- explicit about what happened
-- inspectable in CI
-- readable by humans
-- stable enough for automation
+- useful on a laptop before opening a pull request
+- stable enough for CI quality gates
+- explicit about failures, skips, and integration behavior
+- reviewable by humans in plain text or Markdown
+- consumable by tooling through schema version `2`
+
+## What this tool is not
+
+`dn-kernel` is intentionally not:
+
+- a full SAST platform
+- a hosted code scanning service
+- an AST-complete analyzer for every supported language
+- a remote-only AI wrapper
+- a secret-management product
+
+If you need deep semantic analysis, taint tracking, or enterprise policy enforcement, treat `dn-kernel` as an earlier review layer rather than a replacement.
 
 ## Why this project exists
 
-`dn-kernel` exists to cover a gap between opaque AI review tools and brittle ad-hoc scripts:
+`dn-kernel` exists to cover a practical gap between opaque AI review tools and brittle one-off scripts:
 
-- local-first review should remain useful without a remote service
-- deterministic rules should always be available
-- provider and worker integrations should be additive, not mandatory
-- failures should surface as diagnostics rather than hidden best-effort behavior
-- machine-readable output should be a first-class contract, not an afterthought
+- local-first review should still be valuable without a remote dependency
+- deterministic rules should remain available even when integrations are disabled
+- worker and provider layers should be additive, not mandatory
+- failures should surface as diagnostics instead of disappearing into best-effort behavior
+- automation should rely on a versioned output contract rather than scraping logs
+
+## Who it is for
+
+`dn-kernel` is built for:
+
+- maintainers preparing a first public release
+- developers doing a local pre-PR pass
+- reviewers auditing unfamiliar or inherited repositories
+- CI pipelines that need bounded, machine-readable review signals
+- security-minded teams that want a lightweight local-first review layer
 
 ## Where it is useful
-
-`dn-kernel` is designed for several practical situations:
 
 ### 1. Local repository review before opening a PR
 
 Use it when you want a quick pass over a codebase before sending changes for review.
 It is especially useful for catching:
 
-- TODO markers left behind
+- TODO markers left behind in comments
 - suspicious secret-like assignments
 - obvious hardcoded values
 - hidden-file surprises
@@ -71,46 +88,92 @@ It is especially useful for catching:
 
 ### 2. Reviewing unfamiliar or inherited repositories
 
-If you just cloned a new project, took ownership of an older service, or need to inspect vendor/internal code quickly, `dn-kernel` gives you a bounded first pass with clear diagnostics and limits.
+If you just cloned a new project, took ownership of an older service, or need to inspect vendor/internal code quickly, `dn-kernel` gives you a bounded first pass with clear diagnostics and file/byte limits.
 
 ### 3. CI quality gates
 
-With `--json`, `--summary-only`, and `--fail-on`, the tool can be used as a lightweight quality gate in GitHub Actions or other CI systems.
+With `--json`, `--summary-only`, and `--fail-on`, the tool can be used as a lightweight gate in GitHub Actions or other CI systems.
 
 ### 4. Security-minded code inspection
 
-It is not a replacement for dedicated security tooling, but it is very useful as a fast review layer for suspicious patterns, secret exposure signals, and repository hygiene concerns.
+It is not a replacement for dedicated security tooling, but it is useful as a fast review layer for suspicious patterns, secret exposure signals, unsafe usage, and repository hygiene issues.
 
 ### 5. Human-readable review artifacts
 
-Markdown output makes it easy to generate review notes that can be pasted into issues, PRs, or internal engineering discussions.
+Markdown output is meant to be pasted into issues, PRs, or internal engineering discussions without post-processing.
 
 ### 6. Extensible experimentation
 
-If you are exploring provider-backed code review or worker-driven language analysis, `dn-kernel` provides a small and explicit base to build on.
+If you are exploring provider-backed review or worker-driven language analysis, `dn-kernel` gives you a small explicit base to build on.
 
-## What it does well
+## Feature overview
 
 `dn-kernel` focuses on a few things deliberately:
 
 - deterministic repository scanning
 - profile-driven behavior
-- bounded analysis with explicit limits
+- bounded analysis with explicit file and byte limits
 - structured diagnostics instead of silent failure
 - stable JSON contract for automation
-- readable markdown for human review
-- opt-in integrations rather than hidden side effects
+- readable Markdown for human review
+- opt-in integrations instead of hidden side effects
+
+## Analysis model at a glance
+
+### Deterministic local rules
+
+These rules always run on scanned text content for the active profile. Current built-in rules focus on:
+
+- TODO comments
+- unsafe code keyword usage in code-like contexts
+- secret-like assignments
+- hardcoded credential-like values
+- large-file complexity signals
+
+The local detector posture is intentionally balanced:
+
+- obvious placeholders and examples such as `changeme`, `example`, and `${TOKEN}` are suppressed to reduce false positives
+- common assignment shapes such as `=`, `:`, JSON-style keys, and single-quoted values are recognized to reduce false negatives
+- findings now include line numbers when the local detector can identify a concrete source line
+
+### Worker analysis
+
+Worker analysis is optional and only runs when:
+
+- the active profile enables workers
+- the file content matches suspicious patterns
+- the language is supported by the worker registry
+- the worker executable/script is actually available
+
+This keeps workers useful without making them a hidden dependency of every scan.
+
+### Provider analysis
+
+Provider analysis is also optional and bounded by profile settings such as:
+
+- `ai.enabled`
+- `ai.max_ai_files`
+- `ai.max_content_chars`
+- suspicious pattern triggers
+- severity filtering
+- strict vs non-strict integration behavior
+
+Current provider states:
+
+- `disabled`: stable
+- `mock`: testing-only
+- `ollama`: experimental and restricted to local endpoints such as `localhost`, `127.0.0.1`, and `::1`
 
 ## Current status
 
-`dn-kernel` is currently pre-release.
+`dn-kernel` is currently pre-release, but the repository is maintained with a release-minded posture.
 
 Current guarantees:
 
-- Rust workspace builds, tests, formats, and passes clippy cleanly
-- CLI supports review-local and CI-oriented workflows
-- schema version `2` is the current JSON contract
-- provider and worker integrations are opt-in and explicitly reported
+- the Rust workspace builds, tests, formats, and passes clippy cleanly
+- CLI behavior is covered by unit/integration tests
+- schema version `2` is the active JSON compatibility surface
+- worker and provider integrations are opt-in and explicitly reported
 - GitHub workflows validate CI, smoke behavior, and docs consistency
 
 ## Quick start
@@ -129,7 +192,7 @@ cargo install --path apps/dn-cli
 dn-cli scan . --profile quick
 ```
 
-### Common commands
+## Common commands
 
 ```bash
 dn-cli scan . --profile quick
@@ -141,7 +204,7 @@ dn-cli validate-profile examples/profiles/my-security.toml . --json
 dn-cli doctor . --json
 ```
 
-## CLI capabilities
+## Command surface
 
 Primary commands:
 
@@ -170,9 +233,9 @@ Useful flags for `scan` and `review`:
 `dn-cli` uses these exit codes:
 
 - `0`: command succeeded and quality threshold was not tripped
-- `1`: runtime/configuration/scan execution failure
+- `1`: runtime, configuration, or scan execution failure
 - `2`: scan succeeded but `--fail-on` threshold was reached
-- `3`: validation or doctor command failed
+- `3`: `validate-profile` or `doctor` detected a command-level failure
 
 ## JSON schema v2
 
@@ -186,15 +249,14 @@ Useful flags for `scan` and `review`:
 - `files`
 - `summary`
 
-`metadata` captures execution context.
+Key notes:
 
-`stats` captures counters and severity totals.
-
-`integrations` reports provider and worker activation, usage, strictness, and limits.
-
-`diagnostics` is a structured list of warnings/errors instead of free-form strings.
-
-`files` contains per-file findings, language hints, optional previews, and integration notes.
+- `metadata` captures the command, root, profile, source, format, truncation, and summary-only mode
+- `stats` captures file counters, total bytes, skipped-large-file counts, and severity totals
+- `integrations` reports worker/provider enablement, strictness, usage, and limits
+- `diagnostics` is the structured channel for warnings and errors
+- `files` contains per-file findings, language hints, optional previews, and integration notes
+- local findings may include `line` when the scanner could identify a specific source line
 
 For the exact contract, see `docs/output.md` and `docs/compatibility.md`.
 
@@ -223,17 +285,42 @@ Resolution order:
 2. local profile at `<scan-root>/.dn/profiles/<name>.toml|yml|yaml`
 3. built-in profile
 
-Tracked example profiles for experimentation live under `examples/profiles/`.
-To use one as a scan-root local profile, copy it into `.dn/profiles/` inside the repository you want to scan.
+### Which profile should I use?
 
-Starter profiles included in `examples/profiles/`:
+- `quick`: default local pass while iterating
+- `security`: balanced secret/safety-oriented review with worker/provider hooks
+- `pre-merge`: bounded CI gate with a conservative automation posture
+- `production-readiness`: stronger first-release pass for maintainers
+- `legacy-modernization`: broader cleanup pass for inherited or older repositories
+- `strict`: stronger threshold and broader integrated review when you want more noise in exchange for more scrutiny
+
+### Tracked starter profiles
+
+Tracked examples live under `examples/profiles/` and are meant to be copied into `.dn/profiles/` and adjusted:
 
 - `ci-fast.toml`: compact CI gate with AI disabled
 - `my-security.toml`: balanced security-focused local review
-- `maintainer-review.toml`: maintainer-oriented pass with worker/provider support
+- `maintainer-review.toml`: maintainer-oriented release pass with worker/provider support
 - `legacy-audit.toml`: broader legacy cleanup and modernization sweep
 
-## Security model and trust boundaries
+## Custom profile workflow
+
+Fastest path for a repository-specific profile:
+
+1. copy the closest file from `examples/profiles/`
+2. place it at `<scan-root>/.dn/profiles/<name>.toml`
+3. run `dn-cli validate-profile <path> <root>`
+4. run `dn-cli profiles show <name> <root> --json`
+5. tune suspicious triggers, limits, and integration settings for your repository
+
+Rule of thumb:
+
+- add more suspicious patterns when you want worker/provider paths to trigger more often
+- reduce suspicious patterns when integrations are firing on too much irrelevant content
+- keep deterministic rules small and explicit for stable CI behavior
+- prefer inheritance over duplicating whole profile bodies
+
+## Trust boundaries and security model
 
 Important hardening choices in this project:
 
@@ -241,45 +328,42 @@ Important hardening choices in this project:
 - symlinks are not followed during scanning
 - profile names and inheritance paths reject traversal-like values
 - profile inheritance depth is bounded
-- worker and provider failures are surfaced as diagnostics
+- worker/provider failures surface as diagnostics instead of silently disappearing
 - AI/provider responses are bounded and sanitized before becoming findings
-- `--content` remains opt-in because it can surface secrets in output
-- secret-like local rules suppress obvious placeholders, examples, and env-indirection patterns to cut noisy false positives
-- secret-like local rules recognize common `=`, `:`, JSON, YAML, and quoted assignment styles to improve practical coverage
+- `--content` is opt-in because it can surface secrets in output
+- secret-like local rules suppress obvious placeholders, examples, and env indirection patterns
+- current `ollama` support is intentionally limited to local endpoints
 
-For details, see `docs/threat-model.md`.
+For deeper detail, see `docs/threat-model.md`.
 
-## Provider and worker integrations
+## Current limitations and non-goals
 
-`dn-kernel` has two optional extension layers:
+You should be aware of these boundaries when adopting `dn-kernel`:
 
-- worker layer: language-aware analysis via external workers
-- provider layer: AI-style or provider-backed review
-
-Current provider status:
-
-- `disabled`: stable
-- `mock`: testing-only
-- `ollama`: experimental
-
-The default posture remains local-first. Remote or local provider-backed review is opt-in through profiles.
-For safety, the current `ollama` path is intentionally restricted to local endpoints such as `localhost` / `127.0.0.1`.
+- rule coverage is intentionally small and explicit, not exhaustive
+- suspicious trigger quality still depends on profile tuning for your repository
+- worker coverage depends on supported languages and available runtimes
+- provider-backed review is bounded and optional, not the source of truth
+- `dn-kernel` should complement, not replace, specialized security tooling
 
 ## CI and automation use
 
 A typical CI-oriented command:
 
 ```bash
-dn-cli scan . --profile quick --json --summary-only --fail-on medium
+dn-cli scan . --profile pre-merge --json --summary-only --fail-on medium
 ```
 
-This gives a stable schema, short logs, and non-zero exit when findings cross the configured threshold.
+This gives a stable schema, compact logs, and a non-zero exit when findings cross the configured threshold.
 
 ## Documentation map
+
+Core docs:
 
 - `docs/cli.md`
 - `docs/output.md`
 - `docs/profiles.md`
+- `docs/scanner.md`
 - `docs/providers.md`
 - `docs/architecture.md`
 - `docs/troubleshooting.md`
