@@ -15,4 +15,12 @@ jobs:
       - name: Clippy
         env:
           CARGO_INCREMENTAL: "0"
-        run: cargo clippy --workspace --all-targets --all-features --message-format short -- -D warnings
+        run: |
+          set -euxo pipefail
+          cargo clippy --workspace --all-targets --all-features --message-format short -- -D warnings 2>&1 | tee clippy.log
+      - name: Upload clippy log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippy-log
+          path: clippy.log
