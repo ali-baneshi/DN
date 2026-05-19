@@ -11,7 +11,7 @@
 - `crates/dn-runtime`
   - resolves and validates profiles
   - walks files with ignore-aware traversal
-  - runs deterministic rules
+  - runs heuristic local rules plus a registry-backed multi-language deterministic rule layer
   - orchestrates optional worker and provider passes
   - emits schema v2 reports and structured diagnostics
 - `crates/dn-ipc`

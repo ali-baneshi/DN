@@ -12,6 +12,7 @@
 - `--dry-run` reports which files would change
 - fixes only apply to findings with concrete line numbers
 - non-fixable rules remain report-only
+- the current implementation only removes whole-line TODO/debug-print leftovers; it does not rewrite expressions or control flow
 
 ## Safety posture
 

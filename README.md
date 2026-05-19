@@ -122,13 +122,12 @@ If you are exploring provider-backed review or worker-driven language analysis, 
 
 ### Deterministic local rules
 
-These rules always run on scanned text content for the active profile. Current built-in rules focus on:
+These rules always run on scanned text content for the active profile. The current built-in registry covers 19 rules across four practical groups:
 
-- TODO comments
-- unsafe code keyword usage in code-like contexts
-- secret-like assignments
-- hardcoded credential-like values
-- large-file complexity signals
+- maintainability: `todo-comment`, `large-file`, `hard-to-read-function`, `debug-print`, `commented-out-code`, `wildcard-import`
+- modernization: `deprecated-api`
+- reliability: `empty-error-handler`, `network-without-timeout`, `assert-or-panic-in-production`
+- security: `unsafe-usage`, `possible-secret`, `hardcoded-value`, `weak-hash-usage`, `insecure-random`, `shell-command-concatenation`, `sql-string-concatenation`, `path-traversal-join`, `dangerous-deserialization`
 
 The local detector posture is intentionally balanced:
 
@@ -170,7 +169,7 @@ Current provider states:
 
 The Rust runtime now includes a built-in multi-language rule registry for Rust, Python, JavaScript, TypeScript, and Java. This gives the core scanner broader coverage without requiring a worker for every language.
 
-The current registry includes 10 built-in deterministic rules, with safe autofix support for the narrowest low-risk cases.
+The current registry now includes 19 built-in deterministic rules spanning maintainability, modernization, reliability, and security use cases, with safe autofix support reserved for the narrowest low-risk cases.
 
 ## Current status
 
@@ -364,6 +363,8 @@ These files are release-ready scaffolding, but Homebrew SHA256 values must be fi
 
 - `todo-comment`
 - `debug-print`
+
+The deliberately small fix surface is a safety choice: rules that could change behavior, semantics, or incident visibility remain report-only until they can be proven safe across languages and repository styles.
 
 Use `--dry-run` first to preview changes.
 

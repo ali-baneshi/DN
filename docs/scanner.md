@@ -53,6 +53,25 @@ Current local rule behavior is intentionally conservative:
 - secret-like rules still recognize common config shapes such as `key = "..."`, `key: '...'`, and JSON-style `"key": "..."` assignments
 - worker/provider execution is gated by suspicious patterns so teams can widen or narrow coverage through profiles
 
+
+## Built-in rule library
+
+The current built-in deterministic registry includes 19 rules grouped into:
+
+- maintainability
+- modernization
+- reliability
+- security
+
+This is still intentionally much smaller than large external ecosystems such as Semgrep, but it is broad enough to cover common first-pass repository risks across Rust, Python, JavaScript, TypeScript, and Java.
+
+The current priority is quality and signal density rather than raw rule count. New rules should land with:
+
+- explicit category and severity
+- line-aware findings whenever possible
+- language-conscious matching
+- tests demonstrating both detection and likely false-positive suppression
+
 ## Summary-only mode
 
 `--summary-only` preserves metadata, stats, integrations, and diagnostics while emitting an empty public `files` array in JSON output.
