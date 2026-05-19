@@ -1,6 +1,6 @@
 # Release Guide
 
-Before tagging a release:
+For `v1.0.0` and later releases, before tagging a release:
 
 ```bash
 cargo fmt --all --check

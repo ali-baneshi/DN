@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-19
+
+### Added
+
+- Expand practical deterministic coverage across Rust, Python, JavaScript, TypeScript, Java, Go, PHP, Ruby, and Shell/Bash.
+- Deepen Java and TypeScript worker coverage for higher-signal repository review.
+- Add safe autofix support for more low-risk cleanup findings.
+- Add GitHub-oriented release, docs, and community scaffolding for open-source maintenance.
+
+### Changed
+
+- Stabilize the repository around schema version `2` and structured diagnostics as the main automation surface.
+- Reduce false positives in local rules while improving common false-negative paths for security and reliability findings.
+- Clarify adoption, compatibility, and operational guidance for first-time open-source users.
+
+### Notes
+
+- `ollama` remains experimental and local-only by design.
+- Worker and provider integrations remain opt-in; deterministic scanning remains the default trust base.
+
+
 ### Added
 
 - Expand the deterministic multi-language rule registry to 19 built-in rules in the Rust core runtime.

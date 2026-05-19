@@ -1,6 +1,6 @@
 # Compatibility Policy
 
-`dn-kernel` is pre-release, but public behavior is still treated carefully.
+`dn-kernel` `v1.0.0` treats public behavior as a stable compatibility surface for normal adoption.
 
 ## Compatibility surfaces
 
@@ -28,9 +28,9 @@ Rules:
 - `2`: threshold reached with `--fail-on`
 - `3`: doctor/validate-profile failure
 
-## Pre-release break policy
+## Stable change policy
 
-Because the project is pre-release, controlled CLI/schema changes are allowed, but they must:
+After `v1.0.0`, CLI/schema changes must:
 
 - be documented in `CHANGELOG.md`
 - update tests in the same patch

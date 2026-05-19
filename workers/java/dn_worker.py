@@ -3,7 +3,7 @@ import json
 import re
 import sys
 
-PROTOCOL_VERSION = "0.1.0"
+PROTOCOL_VERSION = "1.0.0"
 SENSITIVE_SINKS = [
     r"Runtime\.getRuntime\(\)\.exec",
     r"ProcessBuilder",

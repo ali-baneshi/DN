@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 const readline = require('readline');
 
-const PROTOCOL_VERSION = '0.1.0';
+const PROTOCOL_VERSION = '1.0.0';
 
 function addFinding(findings, seen, rule, severity, message, category, line) {
   const key = `${rule}:${line}:${message}`;

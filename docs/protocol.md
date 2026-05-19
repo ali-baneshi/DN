@@ -7,7 +7,7 @@ The runtime uses the shared request/response shape from `crates/dn-ipc`.
 
 ```json
 {
-  "protocol_version": "0.1.0",
+  "protocol_version": "1.0.0",
   "request_id": "scan-1",
   "method": "analyze_file",
   "params": {
@@ -22,7 +22,7 @@ The runtime uses the shared request/response shape from `crates/dn-ipc`.
 
 ```json
 {
-  "protocol_version": "0.1.0",
+  "protocol_version": "1.0.0",
   "request_id": "scan-1",
   "status": "ok",
   "findings": [

@@ -172,17 +172,17 @@ Current provider states:
 
 ## Rule registry core
 
-The Rust runtime now includes a built-in multi-language rule registry for Rust, Python, JavaScript, TypeScript, and Java. This gives the core scanner broader coverage without requiring a worker for every language.
+The Rust runtime now includes a built-in multi-language rule registry for Rust, Python, JavaScript, TypeScript, Java, Go, PHP, Ruby, and Shell/Bash. This gives the core scanner broader coverage without requiring a worker for every language.
 
 The current registry now includes 19 built-in deterministic rules spanning maintainability, modernization, reliability, and security use cases, with safe autofix support reserved for the narrowest low-risk cases.
 
 ## Current status
 
-`dn-kernel` is currently pre-release, but the repository is maintained with a release-minded posture.
+`dn-kernel` `v1.0.0` is the first stable public release and is intended to be adoptable for local use, CI experiments, and maintainers preparing or auditing repositories.
 
 Current guarantees:
 
-- the Rust workspace builds, tests, formats, and passes clippy cleanly
+- the Rust workspace builds and key runtime/CLI tests pass before release tagging
 - CLI behavior is covered by unit/integration tests
 - schema version `2` is the active JSON compatibility surface
 - worker and provider integrations are opt-in and explicitly reported

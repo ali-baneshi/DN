@@ -1,6 +1,6 @@
 # Roadmap
 
-`dn-kernel` is pre-release and intentionally scoped for practical use.
+`dn-kernel` `v1.0.0` is released; the roadmap now focuses on post-1.0 hardening and expansion.
 
 ## Current direction (implemented)
 
