@@ -1,7 +1,9 @@
 pub mod provider;
+pub mod rules;
 pub mod worker;
 
 use crate::provider::{AiRequest, ProfileAiConfig, ReviewEngine};
+use crate::rules::analyze_registered_rules;
 use crate::worker::registry::WorkerRegistry;
 use anyhow::{anyhow, Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -14,6 +16,9 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub use dn_ipc::{WorkerRequest, WorkerResponse};
+pub use rules::{
+    apply_safe_fixes, registered_rule_names, rule_specs, RuleFix, RuleMatch, RuleSpec,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanOptions {
@@ -343,6 +348,12 @@ fn default_detectors() -> Vec<String> {
         "todo-comment".to_string(),
         "unsafe-usage".to_string(),
         "possible-secret".to_string(),
+        "hardcoded-value".to_string(),
+        "debug-print".to_string(),
+        "commented-out-code".to_string(),
+        "wildcard-import".to_string(),
+        "deprecated-api".to_string(),
+        "hard-to-read-function".to_string(),
     ]
 }
 
@@ -1843,6 +1854,12 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         match read_text_preview(&path, profile.limits.max_file_read_bytes) {
             Ok(content) => {
                 findings.extend(run_local_rules(&content, &profile));
+                for rule_match in analyze_registered_rules(&rel_path, language.as_deref(), &content)
+                {
+                    if profile.rules_enabled(&rule_match.finding.rule) {
+                        findings.push(rule_match.finding);
+                    }
+                }
 
                 let worker_suspicious =
                     content_matches_suspicious_patterns(&content, &profile.suspicious_patterns);

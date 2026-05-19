@@ -47,7 +47,7 @@ See `docs/compatibility.md` and `docs/output.md` for the formal compatibility su
 
 ## Extensibility points
 
-- deterministic rules: `run_local_rules`
+- deterministic rules: local heuristics in `run_local_rules` plus registry-backed multi-language rules in `crates/dn-runtime/src/rules.rs`
 - workers: `WorkerRegistry` and `WorkerSession`
 - providers: `crates/dn-runtime/src/provider.rs`
 - docs updates: `docs/protocol.md`, `docs/providers.md`, `docs/output.md`

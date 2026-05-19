@@ -26,6 +26,8 @@ cargo run -p dn-cli -- review . --profile architecture --markdown --content
 cargo run -p dn-cli -- profiles list . --json
 cargo run -p dn-cli -- profiles show quick . --json
 cargo run -p dn-cli -- doctor . --json
+cargo run -p dn-cli -- rules --json
+cargo run -p dn-cli -- fix . --profile quick --dry-run --json
 ```
 
 ## Testing guidance

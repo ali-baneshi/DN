@@ -111,6 +111,7 @@ In practice:
 
 - add more `suspicious_patterns` when you want worker/provider analysis to trigger more often
 - reduce `suspicious_patterns` when integrations are firing on too much irrelevant content
+- use `[ai].suspicious_patterns` when provider coverage should differ from worker coverage
 - keep `deterministic_rules` small and explicit for stable CI behavior
 - prefer profile inheritance over duplicating large blocks
 

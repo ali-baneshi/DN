@@ -1,11 +1,12 @@
+use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use dn_runtime::{
-    available_profile_entries, available_profiles, effective_profile, scan_repository, Diagnostic,
-    OutputFormat, ScanOptions,
+    apply_safe_fixes, available_profile_entries, available_profiles, effective_profile,
+    registered_rule_names, rule_specs, scan_repository, Diagnostic, OutputFormat, ScanOptions,
 };
 
 #[derive(Parser, Debug)]
@@ -29,6 +30,10 @@ enum Commands {
     ValidateProfile(ValidateProfileCommand),
     /// Run lightweight environment and integration checks.
     Doctor(DoctorCommand),
+    /// Apply safe automatic fixes for a subset of deterministic rules.
+    Fix(FixCommand),
+    /// Inspect the built-in deterministic rule registry.
+    Rules(RulesCommand),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -96,6 +101,28 @@ struct DoctorCommand {
     json: bool,
     #[arg(default_value = ".")]
     root: String,
+}
+
+#[derive(Args, Debug, Clone)]
+struct FixCommand {
+    /// Path to scan and fix
+    path: String,
+    #[arg(long, default_value = "quick")]
+    profile: String,
+    #[arg(long)]
+    hidden: bool,
+    #[arg(long)]
+    python_worker: bool,
+    #[arg(long)]
+    json: bool,
+    #[arg(long)]
+    dry_run: bool,
+}
+
+#[derive(Args, Debug)]
+struct RulesCommand {
+    #[arg(long)]
+    json: bool,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, ValueEnum)]
@@ -555,6 +582,122 @@ fn run_doctor(command: DoctorCommand) {
     }
 }
 
+fn run_rules(json: bool) {
+    if json {
+        let payload: Vec<_> = rule_specs()
+            .iter()
+            .map(|rule| {
+                serde_json::json!({
+                    "name": rule.name,
+                    "severity": rule.severity,
+                    "category": rule.category,
+                    "summary": rule.summary,
+                    "supports_fix": rule.supports_fix
+                })
+            })
+            .collect();
+        print_json(&serde_json::json!(payload));
+        return;
+    }
+
+    for rule in rule_specs() {
+        println!(
+            "{}	{}	{}	fix={}	{}",
+            rule.name, rule.severity, rule.category, rule.supports_fix, rule.summary
+        );
+    }
+}
+
+fn run_fix(command: FixCommand) {
+    let options = ScanOptions {
+        profile_name: command.profile.clone(),
+        include_hidden: command.hidden,
+        include_content: false,
+        python_worker: command.python_worker,
+        max_files: 10_000,
+        format: OutputFormat::Json,
+        fail_on_severity: None,
+        summary_only: false,
+        strict_integrations: false,
+        command_name: "fix".to_string(),
+    };
+
+    let outcome = match scan_repository(&command.path, &options) {
+        Ok(report) => report,
+        Err(err) => {
+            eprintln!("error: {err}");
+            process::exit(1);
+        }
+    };
+
+    let root = Path::new(&command.path);
+    let fixable = ["todo-comment", "debug-print"];
+    let mut applied = Vec::new();
+
+    for file in &outcome.files {
+        let target_fixes: Vec<_> = file
+            .findings
+            .iter()
+            .filter(|finding| fixable.contains(&finding.rule.as_str()))
+            .filter_map(|finding| {
+                let line = finding.line?;
+                let replacement = match finding.rule.as_str() {
+                    "todo-comment" | "debug-print" => String::new(),
+                    _ => return None,
+                };
+                Some(dn_runtime::RuleFix {
+                    line,
+                    replacement,
+                    description: format!("Auto-fix {}", finding.rule),
+                })
+            })
+            .collect();
+
+        if target_fixes.is_empty() {
+            continue;
+        }
+
+        let abs = root.join(&file.path);
+        let original = match fs::read_to_string(&abs) {
+            Ok(v) => v,
+            Err(err) => {
+                eprintln!("error: failed to read {}: {err}", abs.display());
+                process::exit(1);
+            }
+        };
+        let fixed = apply_safe_fixes(&original, &target_fixes);
+        if !command.dry_run {
+            if let Err(err) = fs::write(&abs, fixed.as_bytes()) {
+                eprintln!("error: failed to write {}: {err}", abs.display());
+                process::exit(1);
+            }
+        }
+        applied.push(serde_json::json!({
+            "path": file.path,
+            "fixes": target_fixes.len()
+        }));
+    }
+
+    if command.json {
+        print_json(&serde_json::json!({
+            "applied": applied,
+            "dry_run": command.dry_run,
+            "fixable_rules": registered_rule_names().into_iter().filter(|name| fixable.contains(name)).collect::<Vec<_>>()
+        }));
+    } else {
+        for item in &applied {
+            println!(
+                "fixed={} count={}",
+                item["path"].as_str().unwrap_or(""),
+                item["fixes"].as_u64().unwrap_or(0)
+            );
+        }
+        if command.dry_run {
+            println!("dry_run=true");
+        }
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
     let _ = std::io::stdout().lock().flush();
@@ -572,5 +715,7 @@ fn main() {
         },
         Commands::ValidateProfile(command) => run_validate_profile(command),
         Commands::Doctor(command) => run_doctor(command),
+        Commands::Fix(command) => run_fix(command),
+        Commands::Rules(command) => run_rules(command.json),
     }
 }

@@ -26,7 +26,15 @@ Validate and resolve a profile file without scanning repository content.
 
 ### `doctor <root>`
 
-Run lightweight environment checks for local profile presence and worker availability.
+Run lightweight environment checks for local profile presence, worker scripts, runtimes, and example profile availability.
+
+### `fix <path>`
+
+Apply safe automatic fixes for a narrow subset of deterministic rules.
+
+### `rules`
+
+List the built-in deterministic rule registry and whether each rule supports `--fix`.
 
 ## Scan flags
 
@@ -40,6 +48,7 @@ Run lightweight environment checks for local profile presence and worker availab
 - `--summary-only`: keep summary/stats/diagnostics but emit an empty `files` array in JSON
 - `--strict-integrations`: convert provider/worker failures from diagnostics into hard failures
 - `--max-files <n>`: override profile file limit for this run
+- `fix --dry-run`: preview safe autofix candidates without mutating files
 
 ## Exit codes
 
@@ -60,4 +69,6 @@ dn-cli profiles show quick . --json
 dn-cli profiles show maintainer-review . --json
 dn-cli validate-profile examples/profiles/my-security.toml . --json
 dn-cli doctor . --json
+dn-cli rules --json
+dn-cli fix . --profile quick --dry-run --json
 ```

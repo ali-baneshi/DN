@@ -147,6 +147,8 @@ Worker analysis is optional and only runs when:
 
 This keeps workers useful without making them a hidden dependency of every scan.
 
+Additional worker coverage is now prepared for Java and TypeScript/JavaScript, while the Rust rule registry provides the first line of multi-language structural coverage directly in core runtime code.
+
 ### Provider analysis
 
 Provider analysis is also optional and bounded by profile settings such as:
@@ -163,6 +165,12 @@ Current provider states:
 - `disabled`: stable
 - `mock`: testing-only
 - `ollama`: experimental and restricted to local endpoints such as `localhost`, `127.0.0.1`, and `::1`
+
+## Rule registry core
+
+The Rust runtime now includes a built-in multi-language rule registry for Rust, Python, JavaScript, TypeScript, and Java. This gives the core scanner broader coverage without requiring a worker for every language.
+
+The current registry includes 10 built-in deterministic rules, with safe autofix support for the narrowest low-risk cases.
 
 ## Current status
 
@@ -202,6 +210,8 @@ dn-cli profiles list . --json
 dn-cli profiles show quick . --json
 dn-cli validate-profile examples/profiles/my-security.toml . --json
 dn-cli doctor . --json
+dn-cli rules --json
+dn-cli fix . --profile quick --dry-run --json
 ```
 
 ## Command surface
@@ -214,6 +224,8 @@ Primary commands:
 - `profiles show <name-or-path> <root>`
 - `validate-profile <path> <root>`
 - `doctor <root>`
+- `rules`
+- `fix <path>`
 
 Useful flags for `scan` and `review`:
 
@@ -336,6 +348,25 @@ Important hardening choices in this project:
 
 For deeper detail, see `docs/threat-model.md`.
 
+## Distribution and installation
+
+The repository now includes release/distribution scaffolding for:
+
+- binary release archives via `.github/workflows/release.yml`
+- a starter Homebrew formula at `packaging/homebrew/dn-kernel.rb`
+- an official composite GitHub Action at `.github/actions/dn-kernel`
+
+These files are release-ready scaffolding, but Homebrew SHA256 values must be filled from real tagged release artifacts before public package publication.
+
+## Safe autofix
+
+`dn-cli fix <path>` is intentionally conservative. In this version it supports low-risk cleanup for:
+
+- `todo-comment`
+- `debug-print`
+
+Use `--dry-run` first to preview changes.
+
 ## Current limitations and non-goals
 
 You should be aware of these boundaries when adopting `dn-kernel`:
@@ -370,6 +401,9 @@ Core docs:
 - `docs/compatibility.md`
 - `docs/threat-model.md`
 - `docs/development.md`
+- `docs/action.md`
+- `docs/fixes.md`
+- `docs/distribution.md`
 
 Project process and metadata:
 

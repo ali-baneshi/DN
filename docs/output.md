@@ -105,3 +105,8 @@ Markdown includes:
 ## Content previews
 
 `--content` enables short previews. Treat previews as potentially secret-bearing.
+
+
+## Fix command output
+
+`dn-cli fix --json` returns a command-specific payload listing changed or changeable files, whether the run was a dry-run, and the subset of fixable rules currently supported.

@@ -1,0 +1,53 @@
+name: dn-kernel
+branding:
+  icon: shield
+  color: blue
+description: Run dn-kernel against a repository path and emit JSON, Markdown, or text output.
+inputs:
+  profile:
+    description: Profile name or local profile path
+    required: false
+    default: quick
+  path:
+    description: Repository path to scan
+    required: false
+    default: .
+  fail-on:
+    description: Severity threshold for failing the workflow
+    required: false
+    default: medium
+  summary-only:
+    description: Emit summary-only JSON output
+    required: false
+    default: "true"
+  markdown:
+    description: Emit markdown instead of JSON
+    required: false
+    default: "false"
+  hidden:
+    description: Include hidden files
+    required: false
+    default: "false"
+outputs:
+  report-path:
+    description: Path to the generated report file
+runs:
+  using: composite
+  steps:
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+    - name: Build dn-cli
+      shell: bash
+      run: cargo build --release -p dn-cli
+    - name: Run dn-kernel
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p .dn-artifacts
+        if [[ "${{ inputs.markdown }}" == "true" ]]; then
+          ./target/release/dn-cli scan "${{ inputs.path }}" --profile "${{ inputs.profile }}" --markdown $([[ "${{ inputs.hidden }}" == "true" ]] && echo --hidden) > .dn-artifacts/report.md
+          echo "report-path=.dn-artifacts/report.md" >> "$GITHUB_OUTPUT"
+        else
+          ./target/release/dn-cli scan "${{ inputs.path }}" --profile "${{ inputs.profile }}" --json --fail-on "${{ inputs.fail-on }}" $([[ "${{ inputs.summary-only }}" == "true" ]] && echo --summary-only) $([[ "${{ inputs.hidden }}" == "true" ]] && echo --hidden) > .dn-artifacts/report.json
+          echo "report-path=.dn-artifacts/report.json" >> "$GITHUB_OUTPUT"
+        fi

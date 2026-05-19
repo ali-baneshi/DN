@@ -3,6 +3,12 @@ name = "dn-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
+repository = "https://github.com/ali-baneshi/dn-kernel"
+homepage = "https://github.com/ali-baneshi/dn-kernel"
 
 [dependencies]
 anyhow.workspace = true

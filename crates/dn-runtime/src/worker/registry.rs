@@ -27,23 +27,50 @@ impl WorkerRegistry {
             sessions: HashMap::new(),
         };
 
-        let script_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")
-            .join("workers")
-            .join("python")
-            .join("dn_worker.py");
+            .join("workers");
 
-        if let Some(command) = resolve_python_command(&script_path) {
+        let python_script = root.join("python").join("dn_worker.py");
+        if let Some(command) = resolve_runtime_command(&python_script, &["python3", "python"]) {
             registry.register(
                 "python",
                 WorkerConfig {
                     command,
-                    args: vec![script_path.to_string_lossy().to_string()],
+                    args: vec![python_script.to_string_lossy().to_string()],
                     timeout_ms: worker_timeout_ms,
                     retries: worker_retries,
                 },
             );
+        }
+
+        let java_script = root.join("java").join("dn_worker.py");
+        if let Some(command) = resolve_runtime_command(&java_script, &["python3", "python"]) {
+            registry.register(
+                "java",
+                WorkerConfig {
+                    command,
+                    args: vec![java_script.to_string_lossy().to_string()],
+                    timeout_ms: worker_timeout_ms,
+                    retries: worker_retries,
+                },
+            );
+        }
+
+        let ts_script = root.join("typescript").join("dn_worker.js");
+        if let Some(command) = resolve_runtime_command(&ts_script, &["node"]) {
+            for language in ["typescript", "javascript"] {
+                registry.register(
+                    language,
+                    WorkerConfig {
+                        command: command.clone(),
+                        args: vec![ts_script.to_string_lossy().to_string()],
+                        timeout_ms: worker_timeout_ms,
+                        retries: worker_retries,
+                    },
+                );
+            }
         }
 
         registry
@@ -86,12 +113,9 @@ impl WorkerRegistry {
                             .get(language)
                             .map(|cfg| cfg.retries)
                             .unwrap_or(0);
-
                         if attempts > retries + 1 {
                             return Err(err);
                         }
-
-                        let _ = retries;
                     }
                 }
             }
@@ -99,12 +123,12 @@ impl WorkerRegistry {
     }
 }
 
-fn resolve_python_command(script_path: &Path) -> Option<String> {
+fn resolve_runtime_command(script_path: &Path, candidates: &[&str]) -> Option<String> {
     if !script_path.is_file() {
         return None;
     }
 
-    for candidate in ["python3", "python"] {
+    for candidate in candidates {
         let available = Command::new(candidate)
             .arg("--version")
             .stdout(Stdio::null())
@@ -113,7 +137,7 @@ fn resolve_python_command(script_path: &Path) -> Option<String> {
             .map(|status| status.success())
             .unwrap_or(false);
         if available {
-            return Some(candidate.to_string());
+            return Some((*candidate).to_string());
         }
     }
 

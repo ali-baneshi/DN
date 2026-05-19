@@ -4,6 +4,12 @@
 
 ### Added
 
+- Add deterministic multi-language rule registry with 10 initial built-in rules in the Rust core runtime.
+- Add `dn-cli rules` for inspecting the rule registry.
+- Add `dn-cli fix` with safe autofix support for `todo-comment` and `debug-print`.
+- Add release/distribution scaffolding: release workflow, Homebrew formula starter, and official composite GitHub Action.
+- Add Java and TypeScript worker entrypoints alongside the existing Python worker path.
+
 - Add schema v2 report contract with `metadata`, `stats`, `integrations`, `diagnostics`, and per-finding `origin`.
 - Add CLI subcommands `profiles list`, `profiles show`, `validate-profile`, and `doctor`.
 - Add scan flags `--fail-on`, `--summary-only`, `--strict-integrations`, and `--max-files`.
