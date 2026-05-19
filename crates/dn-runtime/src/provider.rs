@@ -324,7 +324,11 @@ fn enforce_local_provider_boundary(base_url: &str) -> Result<()> {
     let parsed = reqwest::Url::parse(base_url).context("parse provider base_url")?;
     match parsed.scheme() {
         "http" | "https" => {}
-        other => return Err(anyhow!("provider base_url uses unsupported scheme: {other}")),
+        other => {
+            return Err(anyhow!(
+                "provider base_url uses unsupported scheme: {other}"
+            ))
+        }
     }
 
     let host = parsed
