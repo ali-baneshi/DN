@@ -5,12 +5,44 @@
 [![TOML](https://img.shields.io/badge/TOML-profiles-9C4121)](https://toml.io/)
 [![YAML](https://img.shields.io/badge/YAML-profiles-CB171E?logo=yaml&logoColor=white)](https://yaml.org/)
 [![JSON](https://img.shields.io/badge/JSON-schemas%20%26%20protocol-5E5C5C?logo=json&logoColor=white)](https://www.json.org/json-en.html)
+[![Markdown](https://img.shields.io/badge/Markdown-reporting-000000?logo=markdown)](https://www.markdownguide.org/)
+[![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI%2Fsmoke%2Fdocs-2088FF?logo=githubactions&logoColor=white)](https://github.com/features/actions)
 
 `dn-kernel` is a terminal-first repository review CLI for scanning source trees and producing structured, repeatable findings.
 
 It is built for developers, maintainers, security reviewers, and automation workflows that need a fast local way to inspect a codebase for suspicious patterns, maintainability risks, architecture smells, and profile-driven review signals.
 
 In short: point it at a repository, choose a profile, and get a deterministic review report in text, JSON, or Markdown.
+
+## Technology stack
+
+`dn-kernel` is built with and around these technologies:
+
+- `Rust`: core CLI, runtime, scanning engine, diagnostics model, protocol integration
+- `Python`: optional worker-based language analysis extension
+- `TOML` and `YAML`: local and built-in profile configuration formats
+- `JSON`: machine-readable output, worker/provider protocol payloads, schema-oriented automation
+- `Markdown`: human-readable review reports and documentation
+- `GitHub Actions`: CI, smoke validation, and docs consistency checks
+
+## What this tool is
+
+`dn-kernel` is a local-first code review and repository inspection tool.
+It is not a general-purpose SAST platform, not a hosted code scanning service, and not a remote-only AI wrapper.
+
+Its core value is combining three things in one predictable CLI:
+
+- deterministic local scanning
+- optional language-aware worker analysis
+- optional provider-backed review flows
+
+That makes it useful when you want a review artifact that is:
+
+- fast to generate
+- explicit about what happened
+- inspectable in CI
+- readable by humans
+- stable enough for automation
 
 ## Why this project exists
 
@@ -20,6 +52,54 @@ In short: point it at a repository, choose a profile, and get a deterministic re
 - deterministic rules should always be available
 - provider and worker integrations should be additive, not mandatory
 - failures should surface as diagnostics rather than hidden best-effort behavior
+- machine-readable output should be a first-class contract, not an afterthought
+
+## Where it is useful
+
+`dn-kernel` is designed for several practical situations:
+
+### 1. Local repository review before opening a PR
+
+Use it when you want a quick pass over a codebase before sending changes for review.
+It is especially useful for catching:
+
+- TODO markers left behind
+- suspicious secret-like assignments
+- obvious hardcoded values
+- hidden-file surprises
+- profile-specific review concerns
+
+### 2. Reviewing unfamiliar or inherited repositories
+
+If you just cloned a new project, took ownership of an older service, or need to inspect vendor/internal code quickly, `dn-kernel` gives you a bounded first pass with clear diagnostics and limits.
+
+### 3. CI quality gates
+
+With `--json`, `--summary-only`, and `--fail-on`, the tool can be used as a lightweight quality gate in GitHub Actions or other CI systems.
+
+### 4. Security-minded code inspection
+
+It is not a replacement for dedicated security tooling, but it is very useful as a fast review layer for suspicious patterns, secret exposure signals, and repository hygiene concerns.
+
+### 5. Human-readable review artifacts
+
+Markdown output makes it easy to generate review notes that can be pasted into issues, PRs, or internal engineering discussions.
+
+### 6. Extensible experimentation
+
+If you are exploring provider-backed code review or worker-driven language analysis, `dn-kernel` provides a small and explicit base to build on.
+
+## What it does well
+
+`dn-kernel` focuses on a few things deliberately:
+
+- deterministic repository scanning
+- profile-driven behavior
+- bounded analysis with explicit limits
+- structured diagnostics instead of silent failure
+- stable JSON contract for automation
+- readable markdown for human review
+- opt-in integrations rather than hidden side effects
 
 ## Current status
 
@@ -31,6 +111,7 @@ Current guarantees:
 - CLI supports review-local and CI-oriented workflows
 - schema version `2` is the current JSON contract
 - provider and worker integrations are opt-in and explicitly reported
+- GitHub workflows validate CI, smoke behavior, and docs consistency
 
 ## Quick start
 
