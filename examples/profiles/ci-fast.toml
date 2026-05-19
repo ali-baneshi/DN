@@ -1,0 +1,14 @@
+name = "ci-fast"
+inherits = "pre-merge"
+
+[rules]
+deterministic_rules = ["todo-comment", "possible-secret", "hardcoded-value"]
+prioritize = ["possible-secret", "hardcoded-value"]
+min_severity = "medium"
+
+[limits]
+max_files = 2500
+max_total_bytes = 25_000_000
+
+[ai]
+enabled = false

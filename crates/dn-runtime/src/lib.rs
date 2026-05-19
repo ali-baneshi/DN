@@ -910,32 +910,158 @@ fn contains_code_keyword(content: &str, keyword: &str) -> bool {
     false
 }
 
-/// Detect likely secret assignment patterns (reduce false positives)
-fn has_likely_secret_assignment(lower_content: &str) -> bool {
-    let patterns = [
-        "password =",
-        "password=",
-        "password\":",
-        "secret =",
-        "secret=",
-        "secret\":",
-        "api_key =",
-        "api_key=",
-        "apikey =",
-        "private_key =",
-        "privatekey =",
-    ];
-    patterns.iter().any(|p| lower_content.contains(p))
+fn normalized_code_line(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if trimmed.starts_with("//")
+        || trimmed.starts_with('#')
+        || trimmed.starts_with('*')
+        || trimmed.starts_with("/*")
+        || trimmed.starts_with("--")
+    {
+        return None;
+    }
+
+    let before_inline_comment = trimmed
+        .split_once("//")
+        .map(|(head, _)| head)
+        .unwrap_or(trimmed)
+        .split_once(" #")
+        .map(|(head, _)| head)
+        .unwrap_or(trimmed)
+        .trim();
+
+    if before_inline_comment.is_empty() {
+        return None;
+    }
+
+    Some(before_inline_comment.to_lowercase())
 }
 
-/// Detect likely hardcoded credential patterns
-fn has_likely_hardcoded_credential(lower_content: &str) -> bool {
-    let has_key_pattern = lower_content.contains("api_key") || lower_content.contains("apikey");
-    let has_token_pattern = lower_content.contains("token");
-    let has_assignment = lower_content.contains(" = \"")
-        || lower_content.contains("=\"")
-        || lower_content.contains(": \"");
-    (has_key_pattern || has_token_pattern) && has_assignment
+fn looks_like_placeholder_value(value: &str) -> bool {
+    let normalized = value.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | ' '));
+    if normalized.is_empty() {
+        return true;
+    }
+
+    let lower = normalized.to_lowercase();
+    let placeholders = [
+        "example",
+        "sample",
+        "dummy",
+        "fake",
+        "mock",
+        "test",
+        "changeme",
+        "change-me",
+        "replace-me",
+        "replace_this",
+        "placeholder",
+        "your_",
+        "your-",
+        "xxxx",
+        "abc123",
+        "foobar",
+        "<secret>",
+        "<token>",
+        "<password>",
+        "${",
+        "process.env",
+        "env(",
+        "os.getenv",
+    ];
+
+    placeholders.iter().any(|token| lower.contains(token))
+}
+
+fn parse_assignment(line: &str) -> Option<(&str, &str)> {
+    for separator in ["=>", "=", ":"] {
+        if let Some((left, right)) = line.split_once(separator) {
+            let key = left
+                .trim()
+                .trim_matches(|c: char| matches!(c, '"' | '\'' | '`'));
+            let value = right
+                .trim()
+                .trim_end_matches(',')
+                .trim_end_matches(';')
+                .trim();
+            if !key.is_empty() && !value.is_empty() {
+                return Some((key, value));
+            }
+        }
+    }
+    None
+}
+
+fn is_secret_like_key(key: &str) -> bool {
+    let normalized = key.to_lowercase();
+    let indicators = [
+        "password",
+        "passwd",
+        "pwd",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "access_key",
+        "secret_key",
+        "private_key",
+        "client_secret",
+        "auth_token",
+        "bearer",
+        "github_token",
+    ];
+
+    indicators.iter().any(|needle| normalized.contains(needle))
+}
+
+fn is_quoted_or_literal_secret_value(value: &str) -> bool {
+    let trimmed = value.trim();
+    let quoted = (trimmed.starts_with('"') && trimmed.ends_with('"'))
+        || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+        || (trimmed.starts_with('`') && trimmed.ends_with('`'));
+    let bare_literal = !trimmed.contains(' ') && !trimmed.contains('(') && !trimmed.contains('{');
+
+    (quoted || bare_literal) && trimmed.len() >= 4
+}
+
+/// Detect likely secret assignment patterns with placeholder suppression.
+fn has_likely_secret_assignment(content: &str) -> bool {
+    content
+        .lines()
+        .filter_map(normalized_code_line)
+        .any(|line| {
+            let Some((key, value)) = parse_assignment(&line) else {
+                return false;
+            };
+            is_secret_like_key(key)
+                && is_quoted_or_literal_secret_value(value)
+                && !looks_like_placeholder_value(value)
+        })
+}
+
+/// Detect likely hardcoded credential patterns with stricter value checks.
+fn has_likely_hardcoded_credential(content: &str) -> bool {
+    content
+        .lines()
+        .filter_map(normalized_code_line)
+        .any(|line| {
+            let Some((key, value)) = parse_assignment(&line) else {
+                return false;
+            };
+            if !is_secret_like_key(key) || !is_quoted_or_literal_secret_value(value) {
+                return false;
+            }
+
+            let normalized_value =
+                value.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | ' '));
+            normalized_value.len() >= 8
+                && !looks_like_placeholder_value(value)
+                && normalized_value.chars().any(|c| c.is_ascii_digit())
+        })
 }
 
 fn normalize_severity(severity: &str) -> &str {
@@ -984,8 +1110,6 @@ fn severity_rank(severity: &str) -> u8 {
 
 fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
     let mut findings = Vec::new();
-    let lower = content.to_lowercase();
-
     if profile.rules_enabled("todo-comment") && contains_word(content, "TODO") {
         findings.push(Finding {
             rule: "todo-comment".to_string(),
@@ -1011,7 +1135,7 @@ fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
         });
     }
 
-    if profile.rules_enabled("possible-secret") && has_likely_secret_assignment(&lower) {
+    if profile.rules_enabled("possible-secret") && has_likely_secret_assignment(content) {
         findings.push(Finding {
             rule: "possible-secret".to_string(),
             severity: "high".to_string(),
@@ -1035,7 +1159,7 @@ fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
         });
     }
 
-    if profile.rules_enabled("hardcoded-value") && has_likely_hardcoded_credential(&lower) {
+    if profile.rules_enabled("hardcoded-value") && has_likely_hardcoded_credential(content) {
         findings.push(Finding {
             rule: "hardcoded-value".to_string(),
             severity: "high".to_string(),
@@ -2203,5 +2327,34 @@ provider = { type = "ollama", base_url = "https://example.com", model = "demo" }
             .iter()
             .any(|diag| diag.code == "provider-analysis-failed"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn secret_rule_ignores_comment_examples_and_env_indirection() {
+        assert!(!has_likely_secret_assignment(
+            r#"
+            // password = "example-secret"
+            api_key = "${API_KEY}"
+            client_secret: "changeme"
+            "#
+        ));
+    }
+
+    #[test]
+    fn secret_rule_detects_json_yaml_and_single_quote_assignments() {
+        assert!(has_likely_secret_assignment(
+            r#"
+            const cfg = { "client_secret": "prod-Secret-9" };
+            token: 'real-token-42'
+            "#
+        ));
+    }
+
+    #[test]
+    fn hardcoded_rule_requires_more_than_placeholder_tokens() {
+        assert!(!has_likely_hardcoded_credential("token = \"test-token\""));
+        assert!(has_likely_hardcoded_credential(
+            "github_token = \"ghp_1234567890abcdef\""
+        ));
     }
 }

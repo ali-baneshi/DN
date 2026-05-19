@@ -9,12 +9,16 @@
 - Add scan flags `--fail-on`, `--summary-only`, `--strict-integrations`, and `--max-files`.
 - Add community/release files: `SUPPORT.md`, `RELEASE.md`, `CODEOWNERS`, `docs/compatibility.md`, and `docs/threat-model.md`.
 - Add GitHub workflows for smoke validation and docs consistency checks.
+- Add more tracked profile templates under `examples/profiles/` for CI, maintainer review, and legacy audit workflows.
 
 ### Changed
 
 - Replace free-form runtime `errors` output with structured `diagnostics` in the public JSON contract.
 - Improve Markdown output to include execution summary, integration status, and diagnostics.
 - Strengthen profile validation and integration diagnostics for open-source usage.
+- Reduce secret-detection false positives by suppressing obvious placeholders, examples, comments, and env-indirection patterns.
+- Improve false-negative coverage for secret-like findings across `=`, `:`, JSON-style, and single-quoted assignments.
+- Restrict `ollama` provider endpoints to local-only targets and validate worker protocol versions more strictly.
 
 ### Notes
 

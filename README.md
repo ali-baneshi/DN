@@ -226,6 +226,13 @@ Resolution order:
 Tracked example profiles for experimentation live under `examples/profiles/`.
 To use one as a scan-root local profile, copy it into `.dn/profiles/` inside the repository you want to scan.
 
+Starter profiles included in `examples/profiles/`:
+
+- `ci-fast.toml`: compact CI gate with AI disabled
+- `my-security.toml`: balanced security-focused local review
+- `maintainer-review.toml`: maintainer-oriented pass with worker/provider support
+- `legacy-audit.toml`: broader legacy cleanup and modernization sweep
+
 ## Security model and trust boundaries
 
 Important hardening choices in this project:
@@ -237,6 +244,8 @@ Important hardening choices in this project:
 - worker and provider failures are surfaced as diagnostics
 - AI/provider responses are bounded and sanitized before becoming findings
 - `--content` remains opt-in because it can surface secrets in output
+- secret-like local rules suppress obvious placeholders, examples, and env-indirection patterns to cut noisy false positives
+- secret-like local rules recognize common `=`, `:`, JSON, YAML, and quoted assignment styles to improve practical coverage
 
 For details, see `docs/threat-model.md`.
 

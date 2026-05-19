@@ -1,0 +1,17 @@
+name = "maintainer-review"
+inherits = "production-readiness"
+include_hidden = true
+
+[rules]
+deterministic_rules = ["todo-comment", "possible-secret", "hardcoded-value", "unsafe-usage"]
+suspicious_patterns = ["password", "token", "secret", "unsafe", "eval("]
+prioritize = ["possible-secret", "hardcoded-value", "unsafe-usage"]
+min_severity = "info"
+
+[worker]
+enabled = true
+
+[ai]
+enabled = true
+max_ai_files = 20
+provider = { type = "mock", message = "Summarize risky files and likely follow-up checks." }

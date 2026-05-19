@@ -57,6 +57,7 @@ dn-cli review . --profile architecture --markdown --content
 dn-cli scan . --profile quick --summary-only --json
 dn-cli profiles list . --json
 dn-cli profiles show quick . --json
+dn-cli profiles show maintainer-review . --json
 dn-cli validate-profile examples/profiles/my-security.toml . --json
 dn-cli doctor . --json
 ```

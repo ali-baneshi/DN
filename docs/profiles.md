@@ -28,6 +28,22 @@ Profiles are resolved in this order:
 - `educational`
 - `production-readiness`
 
+## Recommended starting points
+
+If you want a profile that people can adopt quickly in an open-source project, start from one of these:
+
+- `quick`: fast local sanity check while iterating
+- `pre-merge`: CI-friendly gate with bounded limits
+- `security`: suspicious-pattern review with worker/provider hooks enabled
+- `production-readiness`: stronger maintainability and safety bias for release prep
+
+Tracked examples under `examples/profiles/` are meant to be copied and edited:
+
+- `ci-fast.toml`
+- `my-security.toml`
+- `maintainer-review.toml`
+- `legacy-audit.toml`
+
 ## Local profile format
 
 Profiles are TOML or YAML files with these sections:
@@ -81,6 +97,23 @@ provider = { type = "mock", message = "Explain top risks briefly" }
 Tracked example profiles are available under `examples/profiles/` for validation and experimentation.
 If you want the scanner to resolve one by local profile name, copy it into `<scan-root>/.dn/profiles/`.
 
+## Custom profile workflow
+
+Fastest path for a team-specific profile:
+
+1. copy the closest file from `examples/profiles/`
+2. place it at `<scan-root>/.dn/profiles/<name>.toml`
+3. run `dn-cli validate-profile <path> <root>`
+4. run `dn-cli profiles show <name> <root> --json`
+5. tune `suspicious_patterns`, limits, and integration settings based on the repository
+
+In practice:
+
+- add more `suspicious_patterns` when you want worker/provider analysis to trigger more often
+- reduce `suspicious_patterns` when integrations are firing on too much irrelevant content
+- keep `deterministic_rules` small and explicit for stable CI behavior
+- prefer profile inheritance over duplicating large blocks
+
 ## Validation rules
 
 A profile is rejected when:
@@ -126,4 +159,23 @@ inherits = "security"
 enabled = true
 strict = true
 provider = { type = "mock", message = "Summarize high risk findings only" }
+```
+
+### Maintainer-oriented first release pass
+
+```toml
+name = "maintainer-review"
+inherits = "production-readiness"
+include_hidden = true
+
+[rules]
+suspicious_patterns = ["password", "token", "secret", "unsafe", "eval("]
+prioritize = ["possible-secret", "hardcoded-value", "unsafe-usage"]
+
+[worker]
+enabled = true
+
+[ai]
+enabled = true
+provider = { type = "mock", message = "Summarize risky files and likely follow-up checks." }
 ```

@@ -47,6 +47,12 @@ Profiles and CLI overrides can define:
 - provider usage is bounded by `ai.max_ai_files` and content-size limits
 - provider findings may be filtered by `ai.min_severity`
 
+Current local rule behavior is intentionally conservative:
+
+- secret-like rules suppress obvious placeholders such as `changeme`, `example`, `dummy`, and env-indirection values like `${TOKEN}`
+- secret-like rules still recognize common config shapes such as `key = "..."`, `key: '...'`, and JSON-style `"key": "..."` assignments
+- worker/provider execution is gated by suspicious patterns so teams can widen or narrow coverage through profiles
+
 ## Summary-only mode
 
 `--summary-only` preserves metadata, stats, integrations, and diagnostics while emitting an empty public `files` array in JSON output.

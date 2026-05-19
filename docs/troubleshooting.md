@@ -10,6 +10,12 @@ cargo run -p dn-cli -- scan . --profile quick
 
 If using a local profile, ensure the file is under `<root>/.dn/profiles/<name>.toml|yml|yaml`.
 
+If you are building a new custom profile, start from `examples/profiles/` and validate it before scanning:
+
+```bash
+dn-cli validate-profile examples/profiles/ci-fast.toml .
+```
+
 ## Worker appears unused
 
 Worker analysis only runs for suspicious files and supported languages.
@@ -23,6 +29,20 @@ If provider review is enabled but appears absent:
 - inspect `diagnostics`
 - verify profile `ai` settings
 - check whether suspicious patterns matched at all
+
+For `ollama`, only local endpoints are accepted right now. Remote URLs are rejected on purpose.
+
+## Too many false positives
+
+- reduce `rules.suspicious_patterns` in your profile if worker/provider analysis is triggering too broadly
+- prefer `pre-merge` or a trimmed custom profile in CI rather than the broadest local profile
+- remember that obvious placeholders like `example`, `changeme`, and `${TOKEN}` are already suppressed by local secret-like rules
+
+## Missed suspicious files
+
+- add repository-specific terms to `rules.suspicious_patterns`
+- use a profile that enables the worker and/or provider paths
+- increase `limits.max_file_read_bytes` if important indicators are located after the initial preview window
 
 ## `--hidden` appears ineffective
 

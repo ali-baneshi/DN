@@ -1,0 +1,17 @@
+name = "legacy-audit"
+inherits = "legacy-modernization"
+include_hidden = true
+
+[rules]
+deterministic_rules = ["todo-comment", "possible-secret", "hardcoded-value", "unsafe-usage"]
+suspicious_patterns = ["TODO", "FIXME", "XXX", "deprecated", "password", "token"]
+prioritize = ["possible-secret", "hardcoded-value", "todo-comment"]
+min_severity = "low"
+
+[limits]
+max_file_read_bytes = 32_768
+max_total_bytes = 100_000_000
+max_files = 20_000
+
+[ai]
+enabled = false
