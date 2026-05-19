@@ -18,4 +18,4 @@ jobs:
           test -f SUPPORT.md
           test -f RELEASE.md
       - name: Check schema references
-        run: rg -n "schema version|schema_version|fail-on|summary-only|strict-integrations" README.md docs .github
+        run: grep -REn "schema version|schema_version|fail-on|summary-only|strict-integrations" README.md docs .github
