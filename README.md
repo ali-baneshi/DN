@@ -1,5 +1,11 @@
 # dn-kernel
 
+[![Rust](https://img.shields.io/badge/Rust-CLI%20%26%20runtime-000000?logo=rust)](https://www.rust-lang.org/)
+[![Python](https://img.shields.io/badge/Python-worker-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![TOML](https://img.shields.io/badge/TOML-profiles-9C4121)](https://toml.io/)
+[![YAML](https://img.shields.io/badge/YAML-profiles-CB171E?logo=yaml&logoColor=white)](https://yaml.org/)
+[![JSON](https://img.shields.io/badge/JSON-schemas%20%26%20protocol-5E5C5C?logo=json&logoColor=white)](https://www.json.org/json-en.html)
+
 `dn-kernel` is a terminal-first repository review CLI for scanning source trees and producing structured, repeatable findings.
 
 It is built for developers, maintainers, security reviewers, and automation workflows that need a fast local way to inspect a codebase for suspicious patterns, maintainability risks, architecture smells, and profile-driven review signals.
@@ -50,7 +56,7 @@ dn-cli scan . --profile security --json --fail-on medium
 dn-cli review . --profile architecture --markdown --content
 dn-cli profiles list . --json
 dn-cli profiles show quick . --json
-dn-cli validate-profile .dn/profiles/custom.toml . --json
+dn-cli validate-profile .dn/profiles/my-security.toml . --json
 dn-cli doctor . --json
 ```
 
