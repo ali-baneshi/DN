@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WorkerToSupervisor",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+"protocol_version",
+"ok",
+"job_id",
+"report_path",
+"json_report_path",
+"languages",
+"file_count",
+"skipped_count",
+"findings",
+"summary",
+"error"
+  ],
+  "properties": {
+"protocol_version": {
+"type": "string",
+"const": "1"
+},
+"ok": {
+"type": "boolean"
+},
+"job_id": {
+"type": "string",
+"minLength": 1
+},
+"report_path": {
+"type": "string"
+},
+"json_report_path": {
+"type": "string"
+},
+"languages": {
+"type": "object",
+"additionalProperties": {
+"type": "integer",
+"minimum": 0
+}
+},
+"file_count": {
+"type": "integer",
+"minimum": 0
+},
+"skipped_count": {
+"type": "integer",
+"minimum": 0
+},
+"findings": {
+"type": "array",
+"items": {
+"type": "string"
+}
+},
+"summary": {
+"type": ["string", "null"]
+},
+"error": {
+"type": ["string", "null"]
+}
+  }
+}

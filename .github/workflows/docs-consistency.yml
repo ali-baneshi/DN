@@ -1,0 +1,21 @@
+name: docs-consistency
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check required docs files
+        run: |
+          test -f README.md
+          test -f docs/output.md
+          test -f docs/compatibility.md
+          test -f docs/threat-model.md
+          test -f SUPPORT.md
+          test -f RELEASE.md
+      - name: Check schema references
+        run: rg -n "schema version|schema_version|fail-on|summary-only|strict-integrations" README.md docs .github

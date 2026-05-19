@@ -1,0 +1,20 @@
+name: smoke
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Quick JSON scan
+        run: cargo run -p dn-cli -- scan . --profile quick --json --summary-only
+      - name: Markdown review scan
+        run: cargo run -p dn-cli -- scan . --profile architecture --markdown
+      - name: Review alias JSON scan
+        run: cargo run -p dn-cli -- review . --profile security --json --summary-only

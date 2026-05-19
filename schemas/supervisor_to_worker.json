@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SupervisorToWorker",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+"protocol_version",
+"job_id",
+"input_path",
+"output_path",
+"use_llm",
+"llm",
+"limits"
+  ],
+  "properties": {
+"protocol_version": {
+"type": "string",
+"const": "1"
+},
+"job_id": {
+"type": "string",
+"minLength": 1
+},
+"input_path": {
+"type": "string",
+"minLength": 1
+},
+"output_path": {
+"type": "string",
+"minLength": 1
+},
+"use_llm": {
+"type": "boolean"
+},
+"llm": {
+"type": "object",
+"additionalProperties": false,
+"required": ["base_url", "model", "api_key"],
+"properties": {
+"base_url": {
+"type": "string",
+"minLength": 1
+},
+"model": {
+"type": "string",
+"minLength": 1
+},
+"api_key": {
+"type": "string"
+}
+}
+},
+"limits": {
+"type": "object",
+"additionalProperties": false,
+"required": [
+"max_files",
+"max_file_bytes",
+"max_total_bytes",
+"max_findings",
+"include_hidden"
+],
+"properties": {
+"max_files": {
+"type": "integer",
+"minimum": 1
+},
+"max_file_bytes": {
+"type": "integer",
+"minimum": 1
+},
+"max_total_bytes": {
+"type": "integer",
+"minimum": 1
+},
+"max_findings": {
+"type": "integer",
+"minimum": 1
+},
+"include_hidden": {
+"type": "boolean"
+}
+}
+}
+  }
+}

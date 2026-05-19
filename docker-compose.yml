@@ -1,0 +1,9 @@
+services:
+  dn-cli:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:ro
+    command: ["scan", "/workspace", "--profile", "quick", "--json"]

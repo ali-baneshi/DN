@@ -1,0 +1,18 @@
+[package]
+name = "dn-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+globset = "0.4"
+ignore.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+toml = "0.8"
+thiserror.workspace = true
+
+dn-ipc = { path = "../dn-ipc" }

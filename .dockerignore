@@ -1,0 +1,19 @@
+# Ignore heavy artifacts and local state
+.git
+target/
+.dn
+.env
+.env.local
+.venv
+.vscode
+.DS_Store
+Thumbs.db
+**/.pytest_cache
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+coverage.xml
+htmlcov
+report.json
+node_modules/
