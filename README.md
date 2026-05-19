@@ -56,7 +56,7 @@ dn-cli scan . --profile security --json --fail-on medium
 dn-cli review . --profile architecture --markdown --content
 dn-cli profiles list . --json
 dn-cli profiles show quick . --json
-dn-cli validate-profile .dn/profiles/my-security.toml . --json
+dn-cli validate-profile examples/profiles/my-security.toml . --json
 dn-cli doctor . --json
 ```
 
@@ -141,6 +141,9 @@ Resolution order:
 1. explicit file path passed to `--profile`
 2. local profile at `<scan-root>/.dn/profiles/<name>.toml|yml|yaml`
 3. built-in profile
+
+Tracked example profiles for experimentation live under `examples/profiles/`.
+To use one as a scan-root local profile, copy it into `.dn/profiles/` inside the repository you want to scan.
 
 ## Security model and trust boundaries
 

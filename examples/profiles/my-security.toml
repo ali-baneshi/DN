@@ -1,0 +1,32 @@
+name = "my-security"
+inherits = "security"
+include_hidden = true
+
+[rules]
+deterministic_rules = ["todo-comment", "possible-secret", "unsafe-usage"]
+suspicious_patterns = ["password", "api_key", "token"]
+prioritize = ["possible-secret", "unsafe-usage"]
+min_severity = "info"
+
+[file_selection]
+include_binary = false
+include_hidden = true
+exclude_globs = [".git/**", "target/**"]
+
+[limits]
+max_file_size_bytes = 2_097_152
+max_file_read_bytes = 16_384
+max_total_bytes = 50_000_000
+max_files = 10_000
+
+[worker]
+enabled = true
+
+[ai]
+enabled = true
+max_ai_files = 30
+max_content_chars = 1000
+min_severity = "info"
+strict = false
+include_summary_note = true
+provider = { type = "mock", message = "Explain top risks briefly" }

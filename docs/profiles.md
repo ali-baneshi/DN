@@ -78,6 +78,9 @@ provider = { type = "mock", message = "Explain top risks briefly" }
 
 `include_hidden` is accepted at top-level for compatibility and is equivalent to `file_selection.include_hidden`.
 
+Tracked example profiles are available under `examples/profiles/` for validation and experimentation.
+If you want the scanner to resolve one by local profile name, copy it into `<scan-root>/.dn/profiles/`.
+
 ## Validation rules
 
 A profile is rejected when:
