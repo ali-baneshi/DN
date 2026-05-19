@@ -122,7 +122,7 @@ If you are exploring provider-backed review or worker-driven language analysis, 
 
 ### Deterministic local rules
 
-These rules always run on scanned text content for the active profile. The current built-in registry covers 19 rules across four practical groups:
+These rules always run on scanned text content for the active profile. The current built-in registry covers 19 rules across four practical groups and now has practical coverage hooks for 10 common languages through the core detector plus workers:
 
 - maintainability: `todo-comment`, `large-file`, `hard-to-read-function`, `debug-print`, `commented-out-code`, `wildcard-import`
 - modernization: `deprecated-api`
@@ -151,6 +151,7 @@ Current worker coverage now includes:
 - Python worker path for Python-specific suspicious cases
 - TypeScript/JavaScript worker findings for `eval`, dynamic code, DOM XSS, command injection, tainted-flow-to-sink patterns, JWT misconfiguration, and missing timeout handling
 - Java worker findings for command execution, dangerous deserialization, weak hashing, SQL concatenation, empty catch blocks, missing timeouts, tainted flows, and path traversal patterns
+- Go, PHP, Ruby, and Shell/Bash coverage in the deterministic core for common security and reliability smells
 
 ### Provider analysis
 

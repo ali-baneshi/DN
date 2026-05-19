@@ -18,7 +18,7 @@ dn-cli validate-profile examples/profiles/ci-fast.toml .
 
 ## Worker appears unused
 
-Worker analysis only runs for suspicious files and supported languages.
+Worker analysis only runs for suspicious files and supported languages. Current practical language coverage includes Rust, Python, JavaScript, TypeScript, Java, Go, PHP, Ruby, and Shell/Bash across the core detector and workers where applicable.
 Use `--json` and inspect `integrations.worker` and `diagnostics`.
 
 ## Provider issues

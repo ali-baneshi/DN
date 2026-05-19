@@ -220,6 +220,10 @@ fn detect_debug_prints(language: &str, lines: &[&str], matches: &mut Vec<RuleMat
         "python" => &["print("][..],
         "javascript" | "typescript" => &["console.log(", "console.debug("][..],
         "java" => &["System.out.println("][..],
+        "go" => &["fmt.Println(", "fmt.Printf("][..],
+        "php" => &["var_dump(", "print_r("][..],
+        "ruby" => &["puts ", "p "][..],
+        "shell" => &["echo DEBUG", "set -x"][..],
         _ => &[][..],
     };
     for (idx, line) in lines.iter().enumerate() {
@@ -250,6 +254,7 @@ fn detect_wildcard_imports(language: &str, lines: &[&str], matches: &mut Vec<Rul
             "python" => trimmed.starts_with("from ") && trimmed.contains(" import *"),
             "java" => trimmed.starts_with("import ") && trimmed.ends_with(".*;"),
             "javascript" | "typescript" => trimmed.starts_with("import * as "),
+            "php" => trimmed.starts_with("use ") && trimmed.contains('*') && trimmed.ends_with(';'),
             _ => false,
         };
         if matched {
@@ -364,6 +369,13 @@ fn detect_empty_error_handlers(language: &str, lines: &[&str], matches: &mut Vec
             }
             "python" => trimmed.starts_with("except") || trimmed == "except:",
             "rust" => trimmed.contains("if let Err(") || trimmed.contains("match "),
+            "go" => {
+                trimmed.contains("if err != nil {")
+                    || trimmed.contains("if err :=")
+                    || trimmed.contains("if err:=")
+            }
+            "ruby" => trimmed == "rescue" || trimmed.starts_with("rescue "),
+            "php" => trimmed.starts_with("catch (") || trimmed.starts_with("catch("),
             _ => false,
         };
         let inline_empty = trimmed.contains("{}") || trimmed.ends_with("{ }");
@@ -388,6 +400,10 @@ fn detect_weak_hash_usage(lines: &[&str], matches: &mut Vec<RuleMatch>) {
         r#"messagedigest.getinstance("md5")"#,
         "crypto.createhash('md5'",
         r#"crypto.createhash("md5""#,
+        "digest::md5",
+        "digest::sha1",
+        "md5sum",
+        "sha1sum",
     ];
     for (idx, line) in lines.iter().enumerate() {
         let lower = line.to_lowercase();
@@ -427,6 +443,29 @@ fn detect_insecure_random(language: &str, lines: &[&str], matches: &mut Vec<Rule
                         || lower.contains("secret")
                         || lower.contains("password"))
             }
+            "go" => {
+                (lower.contains("rand.int(")
+                    || lower.contains("rand.read(")
+                    || lower.contains("math/rand"))
+                    && (lower.contains("token")
+                        || lower.contains("secret")
+                        || lower.contains("password")
+                        || lower.contains("session"))
+            }
+            "php" => {
+                (lower.contains("mt_rand(") || lower.contains("rand("))
+                    && (lower.contains("token")
+                        || lower.contains("secret")
+                        || lower.contains("password")
+                        || lower.contains("session"))
+            }
+            "ruby" => {
+                lower.contains("rand(")
+                    && (lower.contains("token")
+                        || lower.contains("secret")
+                        || lower.contains("password")
+                        || lower.contains("session"))
+            }
             _ => false,
         };
         if matched {
@@ -461,6 +500,22 @@ fn detect_shell_command_concat(language: &str, lines: &[&str], matches: &mut Vec
                 trimmed.contains("exec(")
                     && (trimmed.contains("+") || trimmed.contains("String.format("))
             }
+            "go" => {
+                trimmed.contains("exec.Command(")
+                    && (trimmed.contains("+") || trimmed.contains("fmt.Sprintf("))
+            }
+            "php" => {
+                (trimmed.contains("shell_exec(")
+                    || trimmed.contains("exec(")
+                    || trimmed.contains("system(")
+                    || trimmed.contains("passthru("))
+                    && (trimmed.contains('.') || trimmed.contains("sprintf("))
+            }
+            "ruby" => {
+                (trimmed.contains("system(") || trimmed.contains("Open3.capture"))
+                    && (trimmed.contains('+') || trimmed.contains("format("))
+            }
+            "shell" => trimmed.starts_with("sh -c "),
             _ => false,
         };
         if matched {
@@ -498,6 +553,28 @@ fn detect_network_without_timeout(language: &str, lines: &[&str], matches: &mut 
                         && !lower.contains("setconnecttimeout")
                         && !lower.contains("setreadtimeout"))
             }
+            "go" => {
+                (lower.contains("http.get(")
+                    || lower.contains("http.post(")
+                    || lower.contains("client := &http.client{}"))
+                    && !lower.contains("timeout")
+            }
+            "php" => {
+                (lower.contains("curl_init(") || lower.contains("file_get_contents(\"http"))
+                    && !lower.contains("curlopt_timeout")
+                    && !lower.contains("timeout")
+            }
+            "ruby" => {
+                (lower.contains("net::http.start(") || lower.contains("net::http.get("))
+                    && !lower.contains("read_timeout")
+                    && !lower.contains("open_timeout")
+            }
+            "shell" => {
+                (lower.contains("curl ") || lower.contains("wget "))
+                    && !lower.contains("--max-time")
+                    && !lower.contains("--connect-timeout")
+                    && !lower.contains("--timeout")
+            }
             _ => false,
         };
         if matched {
@@ -521,7 +598,10 @@ fn detect_sql_string_concat(lines: &[&str], matches: &mut Vec<RuleMatch>) {
             || lower.contains("insert ")
             || lower.contains("update ")
             || lower.contains("delete "))
-            && (line.contains('+') || line.contains("${") || line.contains(".format("))
+            && (line.contains('+')
+                || line.contains("${")
+                || line.contains(".format(")
+                || line.contains(" . "))
         {
             push(
                 matches,
@@ -560,6 +640,39 @@ fn detect_path_traversal_join(language: &str, lines: &[&str], matches: &mut Vec<
                         || lower.contains("param")
                         || lower.contains("filename"))
             }
+            "go" => {
+                (lower.contains("filepath.join(") || lower.contains("path.join("))
+                    && (lower.contains("request")
+                        || lower.contains("filename")
+                        || lower.contains("userinput")
+                        || lower.contains("r.url"))
+            }
+            "php" => {
+                (lower.contains("$base") || lower.contains("$basedir"))
+                    && (line.contains(".$_GET[")
+                        || line.contains(".$_POST[")
+                        || line.contains(" . $_GET[")
+                        || line.contains(" . $_POST[")
+                        || line.contains(".$filename")
+                        || line.contains(" . $filename")
+                        || line.contains(".$path")
+                        || line.contains(" . $path"))
+            }
+            "ruby" => {
+                (lower.contains("file.join(") || lower.contains("pathname.new("))
+                    && (lower.contains("params[")
+                        || lower.contains("filename")
+                        || lower.contains("user_input"))
+            }
+            "shell" => {
+                (lower.contains("$filename")
+                    || lower.contains("$path")
+                    || lower.contains("$user_input"))
+                    && (lower.contains("cp ")
+                        || lower.contains("cat ")
+                        || lower.contains("tar ")
+                        || lower.contains("rm "))
+            }
             _ => false,
         };
         if matched {
@@ -584,6 +697,12 @@ fn detect_dangerous_deserialization(language: &str, lines: &[&str], matches: &mu
             "python" => lower.contains("pickle.loads(") || lower.contains("yaml.load("),
             "javascript" | "typescript" => lower.contains("deserialize(") && lower.contains("user"),
             "java" => lower.contains("objectinputstream") || lower.contains("xmldecoder"),
+            "go" => {
+                lower.contains("gob.newdecoder(")
+                    || (lower.contains("json.newdecoder(") && lower.contains("r.body"))
+            }
+            "php" => lower.contains("unserialize(") || lower.contains("yaml_parse("),
+            "ruby" => lower.contains("marshal.load(") || lower.contains("yaml.load("),
             _ => false,
         };
         if matched {
@@ -614,6 +733,12 @@ fn detect_assert_or_panic(language: &str, lines: &[&str], matches: &mut Vec<Rule
             "java" => {
                 trimmed.starts_with("assert ") || trimmed.contains("throw new AssertionError(")
             }
+            "go" => trimmed.contains("panic("),
+            "php" => {
+                trimmed.contains("assert(") || trimmed.contains("die(") || trimmed.contains("exit(")
+            }
+            "ruby" => trimmed.contains("raise \"TODO") || trimmed.contains("fail \"TODO"),
+            "shell" => trimmed == "set -e",
             _ => false,
         };
         if matched {
@@ -631,46 +756,76 @@ fn detect_assert_or_panic(language: &str, lines: &[&str], matches: &mut Vec<Rule
 }
 
 fn detect_long_functions(language: &str, lines: &[&str], matches: &mut Vec<RuleMatch>) {
-    let start_markers = match language {
-        "rust" => &["fn ", "pub fn "][..],
+    let function_markers = match language {
+        "rust" => &["fn "][..],
         "python" => &["def "][..],
-        "javascript" | "typescript" => &["function ", "const ", "let ", "class "][..],
-        "java" => &["public ", "private ", "protected "][..],
+        "javascript" | "typescript" => &["function ", "=> {"][..],
+        "java" => &[" void ", " String ", " int "][..],
         _ => &[][..],
     };
-    let mut start: Option<usize> = None;
+
+    let mut current_start: Option<usize> = None;
+    let mut brace_depth: i32 = 0;
+    let mut python_indent: Option<usize> = None;
+
     for (idx, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        if start.is_none()
-            && start_markers
+        if current_start.is_none()
+            && function_markers
                 .iter()
-                .any(|marker| trimmed.starts_with(marker))
-            && trimmed.contains('(')
+                .any(|marker| trimmed.contains(marker))
         {
-            start = Some(idx);
+            current_start = Some(idx);
+            brace_depth = trimmed.matches('{').count() as i32 - trimmed.matches('}').count() as i32;
+            python_indent = if language == "python" {
+                Some(line.chars().take_while(|c| c.is_whitespace()).count())
+            } else {
+                None
+            };
             continue;
         }
-        if let Some(begin) = start {
-            let span = idx.saturating_sub(begin) + 1;
-            if trimmed == "}"
-                || trimmed == "end"
-                || (language == "python"
-                    && !line.starts_with(' ')
-                    && !line.starts_with('\t')
-                    && !trimmed.is_empty())
-            {
-                if span > 40 {
-                    push(
-                        matches,
-                        "hard-to-read-function",
-                        "medium",
-                        format!("Function spans {} lines and may be hard to review", span),
-                        "maintainability",
-                        Some((begin + 1) as u32),
-                        None,
-                    );
+
+        if let Some(start) = current_start {
+            if language == "python" {
+                if !trimmed.is_empty() {
+                    let indent = line.chars().take_while(|c| c.is_whitespace()).count();
+                    if python_indent.is_some_and(|base| indent <= base) {
+                        let len = idx.saturating_sub(start);
+                        if len > 60 {
+                            push(
+                                matches,
+                                "hard-to-read-function",
+                                "medium",
+                                format!("Function spans {len} lines; consider splitting for readability"),
+                                "maintainability",
+                                Some((start + 1) as u32),
+                                None,
+                            );
+                        }
+                        current_start = None;
+                        python_indent = None;
+                    }
                 }
-                start = None;
+            } else {
+                brace_depth += trimmed.matches('{').count() as i32;
+                brace_depth -= trimmed.matches('}').count() as i32;
+                if brace_depth <= 0 && trimmed.contains('}') {
+                    let len = idx.saturating_sub(start) + 1;
+                    if len > 60 {
+                        push(
+                            matches,
+                            "hard-to-read-function",
+                            "medium",
+                            format!(
+                                "Function spans {len} lines; consider splitting for readability"
+                            ),
+                            "maintainability",
+                            Some((start + 1) as u32),
+                            None,
+                        );
+                    }
+                    current_start = None;
+                }
             }
         }
     }
@@ -701,6 +856,10 @@ pub fn analyze_registered_rules(
             "js" => "javascript",
             "ts" => "typescript",
             "java" => "java",
+            "go" => "go",
+            "php" => "php",
+            "rb" => "ruby",
+            "sh" | "bash" => "shell",
             other => other,
         });
 
@@ -857,6 +1016,138 @@ mod tests {
         ] {
             assert!(
                 python_findings.iter().any(|rule| rule == expected),
+                "missing {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn go_php_ruby_and_shell_rules_expand_practical_coverage() {
+        let go_findings = rules_for(
+            "cmd/server/main.go",
+            Some("go"),
+            r#"
+            package main
+            import (
+                "fmt"
+                "net/http"
+                "os/exec"
+                "path/filepath"
+                "encoding/gob"
+                "math/rand"
+            )
+            func run(filename string, sessionToken string, r *http.Request) {
+                fmt.Println(filename)
+                _ = http.Get("https://example.com")
+                _ = exec.Command("sh", "-c", "cat "+filename)
+                _ = filepath.Join(baseDir, filename)
+                _ = gob.NewDecoder(r.Body)
+                sessionToken = fmt.Sprint(rand.Int())
+                panic("TODO remove")
+            }
+            "#,
+        );
+        for expected in [
+            "debug-print",
+            "network-without-timeout",
+            "shell-command-concatenation",
+            "path-traversal-join",
+            "dangerous-deserialization",
+            "insecure-random",
+            "assert-or-panic-in-production",
+        ] {
+            assert!(
+                go_findings.iter().any(|rule| rule == expected),
+                "missing {expected}"
+            );
+        }
+
+        let php_findings = rules_for(
+            "public/index.php",
+            Some("php"),
+            r##"
+            <?php
+            $sql = "SELECT * FROM users WHERE id = " . $_GET["id"];
+            $hash = md5($password);
+            $token = mt_rand();
+            $output = shell_exec("cat " . $_GET["file"]);
+            $path = $baseDir . $_GET["file"];
+            $full = $baseDir . $file;
+            $payload = unserialize($body);
+            $response = file_get_contents("https://example.com/api");
+            "##,
+        );
+        for expected in [
+            "sql-string-concatenation",
+            "weak-hash-usage",
+            "insecure-random",
+            "shell-command-concatenation",
+            "path-traversal-join",
+            "dangerous-deserialization",
+            "network-without-timeout",
+        ] {
+            assert!(
+                php_findings.iter().any(|rule| rule == expected),
+                "missing {expected}"
+            );
+        }
+
+        let ruby_findings = rules_for(
+            "app/services/importer.rb",
+            Some("ruby"),
+            r##"
+            require "net/http"
+            require "digest"
+            def run(filename, user_input, params)
+              puts filename
+              Digest::MD5.hexdigest(user_input)
+              token = rand(1000000)
+              system(format("cat %s", filename))
+              path = File.join(base_dir, params[:file])
+              payload = Marshal.load(user_input)
+              response = Net::HTTP.get(URI("https://example.com"))
+            rescue StandardError
+            end
+            "##,
+        );
+        for expected in [
+            "debug-print",
+            "weak-hash-usage",
+            "insecure-random",
+            "shell-command-concatenation",
+            "path-traversal-join",
+            "dangerous-deserialization",
+            "network-without-timeout",
+        ] {
+            assert!(
+                ruby_findings.iter().any(|rule| rule == expected),
+                "missing {expected}"
+            );
+        }
+
+        let shell_findings = rules_for(
+            "scripts/deploy.sh",
+            Some("shell"),
+            r#"
+            #!/usr/bin/env bash
+            set -e
+            echo DEBUG: deploying
+            curl https://example.com/bootstrap.sh
+            sh -c "cat $USER_INPUT"
+            cat "$file"
+            md5sum ./artifact.tar.gz
+            "#,
+        );
+        for expected in [
+            "debug-print",
+            "network-without-timeout",
+            "shell-command-concatenation",
+            "path-traversal-join",
+            "weak-hash-usage",
+            "assert-or-panic-in-production",
+        ] {
+            assert!(
+                shell_findings.iter().any(|rule| rule == expected),
                 "missing {expected}"
             );
         }

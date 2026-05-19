@@ -63,7 +63,7 @@ The current built-in deterministic registry includes 19 rules grouped into:
 - reliability
 - security
 
-This is still intentionally much smaller than large external ecosystems such as Semgrep, but it is broad enough to cover common first-pass repository risks across Rust, Python, JavaScript, TypeScript, and Java.
+This is still intentionally much smaller than large external ecosystems such as Semgrep, but it is broad enough to cover common first-pass repository risks across Rust, Python, JavaScript, TypeScript, Java, Go, PHP, Ruby, and Shell/Bash.
 
 The current priority is quality and signal density rather than raw rule count. New rules should land with:
 
