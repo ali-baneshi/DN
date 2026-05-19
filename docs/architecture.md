@@ -18,6 +18,10 @@
   - shared request/response protocol for workers
 - `workers/python`
   - external Python worker implementation
+- `workers/java`
+  - Java-focused worker for higher-risk runtime/security patterns
+- `workers/typescript`
+  - JavaScript/TypeScript worker for web and service sink analysis
 
 ## Data flow
 

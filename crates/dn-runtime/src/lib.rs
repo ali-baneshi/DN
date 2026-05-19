@@ -895,6 +895,7 @@ fn detect_language(path: &Path) -> Option<String> {
         Some("ts") => Some("typescript".to_string()),
         Some("tsx") => Some("typescript".to_string()),
         Some("jsx") => Some("javascript".to_string()),
+        Some("java") => Some("java".to_string()),
         Some("json") => Some("json".to_string()),
         Some("toml") => Some("toml".to_string()),
         Some("md") => Some("markdown".to_string()),
@@ -1739,12 +1740,12 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
 
     let mut worker_registry = if profile.worker_enabled {
         let registry = WorkerRegistry::new(profile.worker_timeout_ms, profile.worker_retries);
-        if let Some(cfg) = registry.get("python") {
-            if cfg.retries > 0 {
-                worker_mode = "python".to_string();
-            } else {
-                worker_mode = "python (single-shot)".to_string();
-            }
+        let supported = ["python", "java", "typescript", "javascript"]
+            .into_iter()
+            .filter(|language| registry.get(language).is_some())
+            .collect::<Vec<_>>();
+        if !supported.is_empty() {
+            worker_mode = supported.join(",");
         }
         Some(registry)
     } else {

@@ -146,7 +146,11 @@ Worker analysis is optional and only runs when:
 
 This keeps workers useful without making them a hidden dependency of every scan.
 
-Additional worker coverage is now prepared for Java and TypeScript/JavaScript, while the Rust rule registry provides the first line of multi-language structural coverage directly in core runtime code.
+Current worker coverage now includes:
+
+- Python worker path for Python-specific suspicious cases
+- TypeScript/JavaScript worker findings for `eval`, dynamic code, DOM XSS, command injection, tainted-flow-to-sink patterns, JWT misconfiguration, and missing timeout handling
+- Java worker findings for command execution, dangerous deserialization, weak hashing, SQL concatenation, empty catch blocks, missing timeouts, tainted flows, and path traversal patterns
 
 ### Provider analysis
 

@@ -429,3 +429,94 @@ fn cli_fix_dry_run_reports_fixable_files() {
     assert!(text.contains("main.py"));
     assert!(text.contains("dry_run"));
 }
+
+#[test]
+fn cli_typescript_worker_reports_deeper_findings() {
+    let dir = temp_dir("ts-worker-deep");
+    let profiles = dir.join(".dn/profiles");
+    fs::create_dir_all(&profiles).unwrap();
+
+    let profile = r#"
+name = "ts-worker"
+[worker]
+enabled = true
+[rules]
+deterministic_rules = []
+suspicious_patterns = ["eval(", "innerHTML", "fetch(", "exec("]
+[file_selection]
+include_binary = true
+[limits]
+max_file_size_bytes = 8192
+max_file_read_bytes = 8192
+max_total_bytes = 8192
+max_files = 20
+"#;
+    fs::write(profiles.join("ts-worker.toml"), profile).unwrap();
+
+    write(&dir, "app.ts", "const userInput = req.params.file;\nconst html = el.innerHTML = userInput;\nexec(`cat ${userInput}`);\nfetch(url);\neval(userInput);\n");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
+        .args([
+            "scan",
+            dir.to_str().unwrap(),
+            "--profile",
+            "ts-worker",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("ts-dom-xss"));
+    assert!(text.contains("ts-command-injection"));
+    assert!(text.contains("ts-network-no-timeout"));
+}
+
+#[test]
+fn cli_java_worker_reports_deeper_findings() {
+    let dir = temp_dir("java-worker-deep");
+    let profiles = dir.join(".dn/profiles");
+    fs::create_dir_all(&profiles).unwrap();
+
+    let profile = r#"
+name = "java-worker"
+[worker]
+enabled = true
+[rules]
+deterministic_rules = []
+suspicious_patterns = ["Runtime.getRuntime().exec", "ObjectInputStream", "Path.of("]
+[file_selection]
+include_binary = true
+[limits]
+max_file_size_bytes = 8192
+max_file_read_bytes = 8192
+max_total_bytes = 8192
+max_files = 20
+"#;
+    fs::write(profiles.join("java-worker.toml"), profile).unwrap();
+
+    write(
+        &dir,
+        "Main.java",
+        r#"class Main { void load(String filename) throws Exception { String user = request.getParameter("name"); try { go(); } catch (Exception ex) {} Runtime.getRuntime().exec("sh -c " + user); ObjectInputStream in = null; Path p = Path.of(baseDir, filename); } }
+"#,
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
+        .args([
+            "scan",
+            dir.to_str().unwrap(),
+            "--profile",
+            "java-worker",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("java-command-exec"));
+    assert!(text.contains("java-dangerous-deserialization"));
+    assert!(text.contains("java-path-traversal"));
+}

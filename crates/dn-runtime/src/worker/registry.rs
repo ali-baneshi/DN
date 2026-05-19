@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -13,6 +14,7 @@ pub struct WorkerConfig {
     pub args: Vec<String>,
     pub timeout_ms: u64,
     pub retries: u32,
+    pub preflight: Vec<String>,
 }
 
 pub struct WorkerRegistry {
@@ -41,6 +43,7 @@ impl WorkerRegistry {
                     args: vec![python_script.to_string_lossy().to_string()],
                     timeout_ms: worker_timeout_ms,
                     retries: worker_retries,
+                    preflight: vec!["python-worker".to_string()],
                 },
             );
         }
@@ -54,6 +57,7 @@ impl WorkerRegistry {
                     args: vec![java_script.to_string_lossy().to_string()],
                     timeout_ms: worker_timeout_ms,
                     retries: worker_retries,
+                    preflight: vec!["java-worker".to_string()],
                 },
             );
         }
@@ -68,6 +72,7 @@ impl WorkerRegistry {
                         args: vec![ts_script.to_string_lossy().to_string()],
                         timeout_ms: worker_timeout_ms,
                         retries: worker_retries,
+                        preflight: vec!["typescript-worker".to_string()],
                     },
                 );
             }
@@ -98,6 +103,11 @@ impl WorkerRegistry {
                     anyhow::anyhow!("no worker registered for language: {language}")
                 })?;
 
+                if !worker_script_is_safe(&config.args) {
+                    return Err(anyhow::anyhow!(
+                        "worker script path is missing or unsafe for language: {language}"
+                    ));
+                }
                 let session = WorkerSession::new(&config.command, &config.args)?;
                 self.sessions.insert(language.to_string(), session);
             }
@@ -142,4 +152,15 @@ fn resolve_runtime_command(script_path: &Path, candidates: &[&str]) -> Option<St
     }
 
     None
+}
+
+fn worker_script_is_safe(args: &[String]) -> bool {
+    if args.is_empty() {
+        return false;
+    }
+    let script = std::path::Path::new(&args[0]);
+    if !script.is_file() {
+        return false;
+    }
+    fs::canonicalize(script).is_ok()
 }

@@ -74,3 +74,13 @@ When adding new built-in rules:
 - prefer findings with explicit line numbers
 - add regression tests for both positive detection and obvious false-positive suppression
 - avoid adding autofix support unless the change is safely local and behavior-preserving
+
+
+## Java and TypeScript worker development
+
+Java and TypeScript workers are stdio JSON workers like the Python path. When changing them:
+
+- keep responses compatible with `dn-ipc::WorkerResponse`
+- preserve `protocol_version`, `request_id`, and `status` fields
+- prefer line-aware findings
+- add CLI integration tests when expanding worker detection depth

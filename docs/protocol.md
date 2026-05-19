@@ -1,6 +1,6 @@
 # Worker Protocol
 
-The Python worker protocol is newline-delimited JSON over stdio.
+Worker integrations use newline-delimited JSON over stdio. The current repository includes Python, Java, and TypeScript/JavaScript worker implementations.
 The runtime uses the shared request/response shape from `crates/dn-ipc`.
 
 ## Request shape

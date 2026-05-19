@@ -74,3 +74,10 @@ For `ollama`, only local endpoints are accepted right now. Remote URLs are rejec
 - avoid sharing reports generated with `--content`
 - prefer `--summary-only --json` in CI when public artifacts are involved
 - rotate secrets if sensitive material was exposed in logs
+
+
+## Java/TypeScript worker findings are missing
+
+- confirm the file extension maps to a supported language such as `.java`, `.ts`, or `.js`
+- ensure the active profile enables workers and includes suspicious patterns that match the file content
+- inspect `integrations.worker.mode` and `diagnostics` in JSON output to confirm the worker actually ran
