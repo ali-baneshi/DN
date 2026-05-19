@@ -520,3 +520,27 @@ max_files = 20
     assert!(text.contains("java-dangerous-deserialization"));
     assert!(text.contains("java-path-traversal"));
 }
+
+#[test]
+fn cli_fix_applies_additional_safe_cleanup_rules() {
+    let dir = temp_dir("fix-expanded");
+    write(
+        &dir,
+        "sample.py",
+        "from pkg import *\n# if (flag) { doThing(); }\nprint('debug')\n",
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
+        .args(["fix", dir.to_str().unwrap(), "--profile", "quick", "--json"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let updated = fs::read_to_string(dir.join("sample.py")).unwrap();
+    assert!(
+        updated.contains("REVIEW: replace wildcard import")
+            || !updated.contains("from pkg import *")
+    );
+    assert!(!updated.contains("# if (flag) { doThing(); }"));
+    assert!(!updated.contains("print('debug')"));
+}

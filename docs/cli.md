@@ -30,7 +30,7 @@ Run lightweight environment checks for local profile presence, worker scripts, r
 
 ### `fix <path>`
 
-Apply safe automatic fixes for a narrow subset of deterministic rules.
+Apply safe automatic fixes for a narrow subset of deterministic rules, including low-risk cleanup and explicit review markers for wildcard imports.
 
 ### `rules`
 

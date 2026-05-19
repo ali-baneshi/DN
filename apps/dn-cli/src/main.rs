@@ -631,7 +631,12 @@ fn run_fix(command: FixCommand) {
     };
 
     let root = Path::new(&command.path);
-    let fixable = ["todo-comment", "debug-print"];
+    let fixable = [
+        "todo-comment",
+        "debug-print",
+        "commented-out-code",
+        "wildcard-import",
+    ];
     let mut applied = Vec::new();
 
     for file in &outcome.files {
@@ -642,7 +647,11 @@ fn run_fix(command: FixCommand) {
             .filter_map(|finding| {
                 let line = finding.line?;
                 let replacement = match finding.rule.as_str() {
-                    "todo-comment" | "debug-print" => String::new(),
+                    "todo-comment" | "debug-print" | "commented-out-code" => String::new(),
+                    "wildcard-import" => format!(
+                        "// REVIEW: replace wildcard import with explicit imports (line {})",
+                        line
+                    ),
                     _ => return None,
                 };
                 Some(dn_runtime::RuleFix {

@@ -6,6 +6,8 @@
 
 - `todo-comment`
 - `debug-print`
+- `commented-out-code`
+- `wildcard-import` (annotated for manual follow-up)
 
 ## Behavior
 

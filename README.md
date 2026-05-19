@@ -367,6 +367,8 @@ These files are release-ready scaffolding, but Homebrew SHA256 values must be fi
 
 - `todo-comment`
 - `debug-print`
+- `commented-out-code`
+- `wildcard-import` (rewritten as a review marker rather than silently expanded)
 
 The deliberately small fix surface is a safety choice: rules that could change behavior, semantics, or incident visibility remain report-only until they can be proven safe across languages and repository styles.
 

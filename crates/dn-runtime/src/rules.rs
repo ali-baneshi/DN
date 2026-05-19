@@ -84,14 +84,14 @@ pub const RULE_REGISTRY: &[RuleSpec] = &[
         severity: "low",
         category: "maintainability",
         summary: "Comment appears to contain disabled code",
-        supports_fix: false,
+        supports_fix: true,
     },
     RuleSpec {
         name: "wildcard-import",
         severity: "medium",
         category: "maintainability",
         summary: "Wildcard import detected",
-        supports_fix: false,
+        supports_fix: true,
     },
     RuleSpec {
         name: "empty-error-handler",
@@ -204,7 +204,11 @@ fn detect_comment_code_smell(lines: &[&str], matches: &mut Vec<RuleMatch>) {
                 "Comment appears to contain disabled code".to_string(),
                 "maintainability",
                 Some((idx + 1) as u32),
-                None,
+                Some(RuleFix {
+                    line: (idx + 1) as u32,
+                    replacement: String::new(),
+                    description: "Remove commented-out code line".to_string(),
+                }),
             );
         }
     }
@@ -256,7 +260,14 @@ fn detect_wildcard_imports(language: &str, lines: &[&str], matches: &mut Vec<Rul
                 "Wildcard import detected".to_string(),
                 "maintainability",
                 Some((idx + 1) as u32),
-                None,
+                Some(RuleFix {
+                    line: (idx + 1) as u32,
+                    replacement: format!(
+                        "{} // REVIEW: replace wildcard import with explicit imports",
+                        trimmed
+                    ),
+                    description: "Annotate wildcard import for explicit follow-up".to_string(),
+                }),
             );
         }
     }
