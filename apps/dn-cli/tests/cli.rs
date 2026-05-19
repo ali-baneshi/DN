@@ -362,6 +362,7 @@ fn cli_profiles_list_and_show_work() {
     assert!(list.status.success());
     let list_text = String::from_utf8(list.stdout).unwrap();
     assert!(list_text.contains("custom"));
+    assert!(list_text.contains("file:"));
 
     let show = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
         .args([

@@ -157,6 +157,7 @@ impl Provider {
 }
 
 fn analyze_with_ollama(provider: &OllamaProvider, request: &AiRequest) -> Result<Vec<Finding>> {
+    enforce_local_provider_boundary(&provider.base_url)?;
     let url = format!(
         "{}/api/chat/completions",
         provider.base_url.trim_end_matches('/')
@@ -317,6 +318,27 @@ fn analyze_with_ollama(provider: &OllamaProvider, request: &AiRequest) -> Result
     }
 
     Ok(findings)
+}
+
+fn enforce_local_provider_boundary(base_url: &str) -> Result<()> {
+    let parsed = reqwest::Url::parse(base_url).context("parse provider base_url")?;
+    match parsed.scheme() {
+        "http" | "https" => {}
+        other => return Err(anyhow!("provider base_url uses unsupported scheme: {other}")),
+    }
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| anyhow!("provider base_url is missing a host"))?;
+    let is_local = matches!(host, "localhost" | "127.0.0.1" | "::1");
+
+    if !is_local {
+        return Err(anyhow!(
+            "provider base_url must point to a local endpoint for safety: {base_url}"
+        ));
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]

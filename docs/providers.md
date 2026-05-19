@@ -43,6 +43,8 @@ Expected fields:
 - optional `temperature`
 - optional `extra_system_prompt`
 
+For safety, `ollama` base URLs are currently restricted to local endpoints (`localhost`, `127.0.0.1`, `::1`).
+
 ## Strict vs non-strict behavior
 
 - default behavior: provider failures are emitted as diagnostics and scan continues

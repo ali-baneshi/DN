@@ -169,6 +169,13 @@ impl WorkerSession {
 
         let response: dn_ipc::WorkerResponse = serde_json::from_str(&line)
             .map_err(|err| anyhow!("failed parsing worker response: {err}"))?;
+        if response.protocol_version != PROTOCOL_VERSION {
+            return Err(anyhow!(
+                "unexpected worker protocol version: expected {}, got {}",
+                PROTOCOL_VERSION,
+                response.protocol_version
+            ));
+        }
         if response.request_id != request_id {
             return Err(anyhow!(
                 "unexpected worker response id: expected {}, got {}",
@@ -219,6 +226,13 @@ impl WorkerSession {
 
         let response: dn_ipc::WorkerResponse = serde_json::from_str(&line)
             .map_err(|err| anyhow!("failed parsing worker hello response: {err}"))?;
+        if response.protocol_version != PROTOCOL_VERSION {
+            return Err(anyhow!(
+                "unexpected worker hello protocol version: expected {}, got {}",
+                PROTOCOL_VERSION,
+                response.protocol_version
+            ));
+        }
 
         if response.status != "ok" {
             return Err(anyhow!(

@@ -254,6 +254,7 @@ Current provider status:
 - `ollama`: experimental
 
 The default posture remains local-first. Remote or local provider-backed review is opt-in through profiles.
+For safety, the current `ollama` path is intentionally restricted to local endpoints such as `localhost` / `127.0.0.1`.
 
 ## CI and automation use
 

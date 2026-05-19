@@ -4,7 +4,8 @@ use std::process;
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use dn_runtime::{
-    available_profiles, effective_profile, scan_repository, Diagnostic, OutputFormat, ScanOptions,
+    available_profile_entries, available_profiles, effective_profile, scan_repository, Diagnostic,
+    OutputFormat, ScanOptions,
 };
 
 #[derive(Parser, Debug)]
@@ -53,6 +54,7 @@ struct ScanCommand {
     #[arg(long)]
     strict_integrations: bool,
     #[arg(long)]
+    #[arg(value_parser = parse_positive_usize)]
     max_files: Option<usize>,
 }
 
@@ -117,6 +119,16 @@ impl FailOnSeverity {
             Self::Critical => "critical",
         }
     }
+}
+
+fn parse_positive_usize(value: &str) -> Result<usize, String> {
+    let parsed = value
+        .parse::<usize>()
+        .map_err(|_| format!("invalid positive integer: {value}"))?;
+    if parsed == 0 {
+        return Err("value must be greater than zero".to_string());
+    }
+    Ok(parsed)
 }
 
 fn render_markdown(report: &dn_runtime::ScanReport) -> String {
@@ -331,17 +343,17 @@ fn print_json(value: &serde_json::Value) {
 }
 
 fn run_profile_list(root: &str, json: bool) {
-    let names = available_profiles(Path::new(root));
+    let names = available_profile_entries(Path::new(root));
     if json {
         let payload: Vec<_> = names
             .into_iter()
-            .map(|name| serde_json::json!({"name": name, "source": if Path::new(root).join(".dn/profiles").join(format!("{}.toml", name)).exists() { "local" } else { "builtin" }}))
+            .map(|(name, source)| serde_json::json!({"name": name, "source": source}))
             .collect();
         print_json(&serde_json::json!(payload));
         return;
     }
-    for name in names {
-        println!("{name}");
+    for (name, source) in names {
+        println!("{name}\t{source}");
     }
 }
 

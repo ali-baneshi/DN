@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::path::Path;
+use std::process::{Command, Stdio};
 
 use anyhow::Result;
 
@@ -32,15 +34,17 @@ impl WorkerRegistry {
             .join("python")
             .join("dn_worker.py");
 
-        registry.register(
-            "python",
-            WorkerConfig {
-                command: "python".to_string(),
-                args: vec![script_path.to_string_lossy().to_string()],
-                timeout_ms: worker_timeout_ms,
-                retries: worker_retries,
-            },
-        );
+        if let Some(command) = resolve_python_command(&script_path) {
+            registry.register(
+                "python",
+                WorkerConfig {
+                    command,
+                    args: vec![script_path.to_string_lossy().to_string()],
+                    timeout_ms: worker_timeout_ms,
+                    retries: worker_retries,
+                },
+            );
+        }
 
         registry
     }
@@ -93,4 +97,25 @@ impl WorkerRegistry {
             }
         }
     }
+}
+
+fn resolve_python_command(script_path: &Path) -> Option<String> {
+    if !script_path.is_file() {
+        return None;
+    }
+
+    for candidate in ["python3", "python"] {
+        let available = Command::new(candidate)
+            .arg("--version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if available {
+            return Some(candidate.to_string());
+        }
+    }
+
+    None
 }

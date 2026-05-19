@@ -1389,6 +1389,43 @@ pub fn load_profile(name_or_path: &str, root: &Path) -> Result<(RuntimeProfile, 
     Err(anyhow!("unknown profile '{}'", name_or_path))
 }
 
+pub fn available_profile_entries(root: &Path) -> Vec<(String, String)> {
+    let mut entries = vec![
+        "quick",
+        "security",
+        "architecture",
+        "deep",
+        "performance",
+        "maintainability",
+        "ai-generated-code-review",
+        "legacy-modernization",
+        "pre-merge",
+        "strict",
+        "educational",
+        "production-readiness",
+    ]
+    .into_iter()
+    .map(|name| (name.to_string(), "builtin".to_string()))
+    .collect::<Vec<_>>();
+
+    let profile_dir = root.join(".dn/profiles");
+    if let Ok(entries_iter) = fs::read_dir(profile_dir) {
+        for entry in entries_iter.flatten() {
+            let path = entry.path();
+            let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+            if ext == "toml" || ext == "yml" || ext == "yaml" {
+                if let Some(name) = path.file_stem().and_then(|name| name.to_str()) {
+                    entries.push((name.to_string(), format!("file:{}", path.display())));
+                }
+            }
+        }
+    }
+
+    entries.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+    entries.dedup_by(|a, b| a.0 == b.0);
+    entries
+}
+
 pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<ScanOutcome> {
     let start = Instant::now();
     let root = root.as_ref();
@@ -2130,5 +2167,41 @@ max_files = 0
         assert!(diagnostics
             .iter()
             .any(|diag| diag.code == "ai-enabled-provider-disabled"));
+    }
+
+    #[test]
+    fn rejects_non_local_provider_endpoint() {
+        let root = make_tmp_root("remote-provider");
+        write_file(&root, "suspicious.py", "eval('2+2')\n");
+        fs::write(
+            root.join(".dn/profiles/remote-provider.toml"),
+            r#"
+name = "remote-provider"
+[rules]
+deterministic_rules = []
+suspicious_patterns = ["eval("]
+[ai]
+enabled = true
+max_ai_files = 10
+provider = { type = "ollama", base_url = "https://example.com", model = "demo" }
+"#,
+        )
+        .unwrap();
+
+        let report = scan_repository(
+            &root,
+            &ScanOptions {
+                profile_name: "remote-provider".into(),
+                ..ScanOptions::default()
+            },
+        )
+        .unwrap();
+
+        assert!(report
+            .report
+            .diagnostics
+            .iter()
+            .any(|diag| diag.code == "provider-analysis-failed"));
+        let _ = fs::remove_dir_all(root);
     }
 }
