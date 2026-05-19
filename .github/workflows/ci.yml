@@ -19,6 +19,8 @@ jobs:
       - name: Test
         run: cargo test --workspace
       - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+        env:
+          CARGO_INCREMENTAL: "0"
+        run: cargo clippy --workspace --all-targets --all-features --message-format short -- -D warnings
       - name: Fmt
         run: cargo fmt --all --check
