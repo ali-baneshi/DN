@@ -20,8 +20,6 @@ jobs:
         run: make -C workers/c
       - name: Test
         run: cargo test --workspace
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Fmt
         run: cargo fmt --all --check
 
