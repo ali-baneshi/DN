@@ -52,6 +52,8 @@ struct ScanCommand {
     hidden: bool,
     #[arg(long)]
     python_worker: bool,
+    #[arg(long)]
+    fast: bool,
     #[arg(long, value_enum, default_value = "none")]
     fail_on: FailOnSeverity,
     #[arg(long)]
@@ -135,19 +137,6 @@ enum FailOnSeverity {
     Critical,
 }
 
-impl FailOnSeverity {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::None => "none",
-            Self::Info => "info",
-            Self::Low => "low",
-            Self::Medium => "medium",
-            Self::High => "high",
-            Self::Critical => "critical",
-        }
-    }
-}
-
 fn parse_positive_usize(value: &str) -> Result<usize, String> {
     let parsed = value
         .parse::<usize>()
@@ -162,48 +151,34 @@ fn render_markdown(report: &dn_runtime::ScanReport) -> String {
     let mut output = String::new();
     output.push_str("# dn-kernel Review Report\n\n");
     output.push_str("## Execution Summary\n\n");
-    output.push_str(&format!("- Root: `{}`\n", report.metadata.root));
-    output.push_str(&format!("- Profile: `{}`\n", report.metadata.profile));
-    output.push_str(&format!(
-        "- Profile source: `{}`\n",
-        report.metadata.profile_source
-    ));
-    output.push_str(&format!("- Command: `{}`\n", report.metadata.command));
-    output.push_str(&format!("- Duration: {}ms\n", report.metadata.duration_ms));
-    output.push_str(&format!("- Truncated: {}\n", report.metadata.truncated));
-    output.push_str(&format!(
-        "- Summary only: {}\n\n",
-        report.metadata.summary_only
-    ));
+    output.push_str(&format!("- Root: `{}`\n", report.root));
+    output.push_str(&format!("- Profile: `{}`\n", report.profile));
+    output.push_str(&format!("- Profile source: `{}`\n", report.profile_source));
+    output.push_str(&format!("- Worker mode: `{}`\n", report.worker));
+    output.push_str(&format!("- Duration: {}ms\n", report.duration_ms));
+    output.push_str(&format!("- Truncated: {}\n", report.truncated));
+    output.push_str("- Summary only: false\n\n");
 
     output.push_str("## Integration Status\n\n");
-    output.push_str(&format!(
-        "- Worker: enabled={} mode=`{}` used={} strict={}\n",
-        report.integrations.worker.enabled,
-        report.integrations.worker.mode,
-        report.integrations.worker.used,
-        report.integrations.worker.strict
-    ));
-    output.push_str(&format!(
-        "- Provider: enabled={} mode=`{}` used={} strict={}\n\n",
-        report.integrations.provider.enabled,
-        report.integrations.provider.mode,
-        report.integrations.provider.used,
-        report.integrations.provider.strict
-    ));
+    output.push_str(&format!("- Worker: `{}`\n", report.worker));
+    output.push_str(&format!("- Provider: `{}`\n\n", report.provider));
 
     output.push_str("## Severity Breakdown\n\n");
     output.push_str(&format!(
         "- Findings total: {}\n",
-        report.stats.findings_total
+        report
+            .files
+            .iter()
+            .map(|file| file.findings.len())
+            .sum::<usize>()
     ));
     output.push_str(&format!(
         "- info={} low={} medium={} high={} critical={}\n\n",
-        report.stats.severity_breakdown.info,
-        report.stats.severity_breakdown.low,
-        report.stats.severity_breakdown.medium,
-        report.stats.severity_breakdown.high,
-        report.stats.severity_breakdown.critical
+        report.severity_breakdown.info,
+        report.severity_breakdown.low,
+        report.severity_breakdown.medium,
+        report.severity_breakdown.high,
+        report.severity_breakdown.critical
     ));
 
     output.push_str("## Findings\n\n");
@@ -221,7 +196,11 @@ fn render_markdown(report: &dn_runtime::ScanReport) -> String {
                 .unwrap_or_default();
             output.push_str(&format!(
                 "- **{}** [{} / {}{}] {}\n",
-                finding.severity, finding.origin, finding.rule, line_suffix, finding.message
+                finding.severity,
+                finding.source.as_deref().unwrap_or("local"),
+                finding.rule,
+                line_suffix,
+                finding.message
             ));
         }
         output.push('\n');
@@ -231,16 +210,7 @@ fn render_markdown(report: &dn_runtime::ScanReport) -> String {
     }
 
     output.push_str("## Diagnostics\n\n");
-    if report.diagnostics.is_empty() {
-        output.push_str("- No diagnostics reported.\n");
-    } else {
-        for diagnostic in &report.diagnostics {
-            output.push_str(&format!(
-                "- {} [{}:{}] {}\n",
-                diagnostic.level, diagnostic.source, diagnostic.code, diagnostic.message
-            ));
-        }
-    }
+    output.push_str("- No diagnostics reported.\n");
     output
 }
 
@@ -260,27 +230,25 @@ fn print_report(report: &dn_runtime::ScanReport, want_json: bool, want_markdown:
         return;
     }
 
-    println!("schema_version={}", report.schema_version);
-    println!("root={}", report.metadata.root);
-    println!("profile={}", report.metadata.profile);
-    println!("profile_source={}", report.metadata.profile_source);
-    println!("command={}", report.metadata.command);
-    println!("worker={}", report.integrations.worker.mode);
-    println!("provider={}", report.integrations.provider.mode);
-    println!("files_discovered={}", report.stats.files_discovered);
-    println!("files_scanned={}", report.stats.files_scanned);
-    println!("files_selected={}", report.stats.files_selected);
-    println!("findings={}", report.stats.findings_total);
+    println!("schema_version=2");
+    println!("root={}", report.root);
+    println!("profile={}", report.profile);
+    println!("profile_source={}", report.profile_source);
+    println!("command={}", report.worker);
+    println!("worker={}", report.worker);
+    println!("provider={}", report.provider);
+    println!("files_discovered={}", report.files_discovered);
+    println!("files_scanned={}", report.files_scanned);
+    println!("files_selected={}", report.files_selected);
+    println!(
+        "findings={}",
+        report
+            .files
+            .iter()
+            .map(|file| file.findings.len())
+            .sum::<usize>()
+    );
     println!("summary={}", report.summary);
-    if !report.diagnostics.is_empty() {
-        println!("diagnostics:");
-        for diagnostic in &report.diagnostics {
-            println!(
-                "  - {} [{}:{}] {}",
-                diagnostic.level, diagnostic.source, diagnostic.code, diagnostic.message
-            );
-        }
-    }
 }
 
 fn severity_triggered(report: &dn_runtime::ScanReport, threshold: FailOnSeverity) -> bool {
@@ -308,7 +276,7 @@ fn severity_triggered(report: &dn_runtime::ScanReport, threshold: FailOnSeverity
         } >= rank)
 }
 
-fn run_scan(command_name: &str, command: ScanCommand) {
+fn run_scan(_command_name: &str, command: ScanCommand) {
     let output_format = if command.json {
         OutputFormat::Json
     } else if command.markdown {
@@ -326,11 +294,9 @@ fn run_scan(command_name: &str, command: ScanCommand) {
         } else {
             10_000
         }),
-        format: output_format,
-        fail_on_severity: Some(command.fail_on.as_str().to_string()),
         summary_only: command.summary_only,
-        strict_integrations: command.strict_integrations,
-        command_name: command_name.to_string(),
+        fast: command.fast,
+        format: output_format,
     };
 
     let outcome = match scan_repository(&command.path, &options) {
@@ -357,8 +323,8 @@ fn run_scan(command_name: &str, command: ScanCommand) {
         }
     };
 
-    print_report(&outcome.report, command.json, command.markdown);
-    if severity_triggered(&outcome.report, command.fail_on) {
+    print_report(&outcome, command.json, command.markdown);
+    if severity_triggered(&outcome, command.fail_on) {
         process::exit(2);
     }
 }
@@ -615,11 +581,9 @@ fn run_fix(command: FixCommand) {
         include_content: false,
         python_worker: command.python_worker,
         max_files: 10_000,
-        format: OutputFormat::Json,
-        fail_on_severity: None,
         summary_only: false,
-        strict_integrations: false,
-        command_name: "fix".to_string(),
+        fast: true,
+        format: OutputFormat::Json,
     };
 
     let outcome = match scan_repository(&command.path, &options) {
@@ -639,14 +603,27 @@ fn run_fix(command: FixCommand) {
     ];
     let mut applied = Vec::new();
 
+    let mut files_to_fix = Vec::new();
     for file in &outcome.files {
-        let target_fixes: Vec<_> = file
-            .findings
-            .iter()
-            .filter(|finding| fixable.contains(&finding.rule.as_str()))
+        let abs = root.join(&file.path);
+        if let Ok(original) = fs::read_to_string(&abs) {
+            let matches = dn_runtime::rules::analyze_registered_rules(&file.path, None, &original);
+            if matches
+                .iter()
+                .any(|rule_match| fixable.contains(&rule_match.finding.rule.as_str()))
+            {
+                files_to_fix.push((file.path.clone(), original, matches));
+            }
+        }
+    }
+
+    for (path, original, matches) in files_to_fix {
+        let target_fixes: Vec<_> = matches
+            .into_iter()
+            .filter(|finding| fixable.contains(&finding.finding.rule.as_str()))
             .filter_map(|finding| {
-                let line = finding.line?;
-                let replacement = match finding.rule.as_str() {
+                let line = finding.finding.line?;
+                let replacement = match finding.finding.rule.as_str() {
                     "todo-comment" | "debug-print" | "commented-out-code" => String::new(),
                     "wildcard-import" => format!(
                         "// REVIEW: replace wildcard import with explicit imports (line {})",
@@ -654,10 +631,10 @@ fn run_fix(command: FixCommand) {
                     ),
                     _ => return None,
                 };
-                Some(dn_runtime::RuleFix {
+                Some(dn_runtime::rules::RuleFix {
                     line,
                     replacement,
-                    description: format!("Auto-fix {}", finding.rule),
+                    description: format!("Auto-fix {}", finding.finding.rule),
                 })
             })
             .collect();
@@ -666,23 +643,18 @@ fn run_fix(command: FixCommand) {
             continue;
         }
 
-        let abs = root.join(&file.path);
-        let original = match fs::read_to_string(&abs) {
-            Ok(v) => v,
-            Err(err) => {
-                eprintln!("error: failed to read {}: {err}", abs.display());
-                process::exit(1);
-            }
-        };
         let fixed = apply_safe_fixes(&original, &target_fixes);
         if !command.dry_run {
-            if let Err(err) = fs::write(&abs, fixed.as_bytes()) {
-                eprintln!("error: failed to write {}: {err}", abs.display());
+            if let Err(err) = fs::write(root.join(&path), fixed.as_bytes()) {
+                eprintln!(
+                    "error: failed to write {}: {err}",
+                    root.join(&path).display()
+                );
                 process::exit(1);
             }
         }
         applied.push(serde_json::json!({
-            "path": file.path,
+            "path": path,
             "fixes": target_fixes.len()
         }));
     }

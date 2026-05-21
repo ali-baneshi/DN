@@ -1,4 +1,5 @@
 pub mod provider;
+pub mod rules;
 pub mod worker;
 
 use crate::provider::{AiRequest, ProfileAiConfig, ReviewEngine};
@@ -7,6 +8,7 @@ use anyhow::{anyhow, Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::io::Read;
@@ -14,6 +16,51 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub use dn_ipc::{WorkerRequest, WorkerResponse};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Diagnostic {
+    pub level: String,
+    pub source: String,
+    pub code: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReportMetadata {
+    pub root: String,
+    pub profile: String,
+    pub profile_source: String,
+    pub command: String,
+    pub duration_ms: u128,
+    pub truncated: bool,
+    pub summary_only: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IntegrationStatus {
+    pub enabled: bool,
+    pub mode: String,
+    pub used: bool,
+    pub strict: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Integrations {
+    pub worker: IntegrationStatus,
+    pub provider: IntegrationStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScanStats {
+    pub findings_total: usize,
+    pub files_discovered: usize,
+    pub files_scanned: usize,
+    pub files_selected: usize,
+    pub files_skipped: usize,
+    pub severity_breakdown: SeverityStats,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanOptions {
@@ -27,6 +74,10 @@ pub struct ScanOptions {
     #[serde(default)]
     pub max_files: usize,
     #[serde(default)]
+    pub summary_only: bool,
+    #[serde(default)]
+    pub fast: bool,
+    #[serde(default)]
     pub format: OutputFormat,
 }
 
@@ -38,9 +89,25 @@ impl Default for ScanOptions {
             include_content: false,
             python_worker: false,
             max_files: 10_000,
+            summary_only: false,
+            fast: false,
             format: OutputFormat::Text,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CacheEntry {
+    size: u64,
+    modified: u64,
+    content_hash: String,
+    findings: Vec<Finding>,
+    content_preview: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct ScanCache {
+    files: std::collections::HashMap<String, CacheEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -135,7 +202,7 @@ pub struct RuntimeProfile {
     pub include_hidden: Option<bool>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectiveProfile {
     pub name: String,
     pub description: String,
@@ -195,6 +262,10 @@ pub struct SeverityStats {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanReport {
+    pub schema_version: String,
+    pub metadata: ReportMetadata,
+    pub integrations: Integrations,
+    pub stats: ScanStats,
     pub root: String,
     pub profile: String,
     pub provider: String,
@@ -213,12 +284,53 @@ pub struct ScanReport {
     pub severity_breakdown: SeverityStats,
     pub duration_ms: u128,
     pub summary: String,
+    #[serde(default)]
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 #[derive(Debug)]
 pub enum ProfileSource {
     Builtin,
     Loaded(PathBuf),
+}
+
+pub fn registered_rule_names() -> Vec<&'static str> {
+    rules::registered_rule_names()
+}
+
+pub fn rule_specs() -> &'static [rules::RuleSpec] {
+    rules::rule_specs()
+}
+
+pub fn apply_safe_fixes(content: &str, fixes: &[rules::RuleFix]) -> String {
+    rules::apply_safe_fixes(content, fixes)
+}
+
+pub fn available_profile_entries(root: &Path) -> Vec<(String, String)> {
+    let profile_dir = root.join(".dn/profiles");
+    available_profiles(root)
+        .into_iter()
+        .map(|name| {
+            let source = profile_path_candidates(&profile_dir, &name)
+                .into_iter()
+                .find(|path| path.exists())
+                .map(|path| format!("file:{}", path.display()))
+                .unwrap_or_else(|| "builtin".to_string());
+            (name, source)
+        })
+        .collect()
+}
+
+pub fn effective_profile(
+    name_or_path: &str,
+    root: &Path,
+) -> Result<(EffectiveProfile, String, Vec<Diagnostic>)> {
+    let (profile, source) = load_profile(name_or_path, root)?;
+    let source_label = match source {
+        ProfileSource::Builtin => "builtin".to_string(),
+        ProfileSource::Loaded(path) => format!("file:{}", path.display()),
+    };
+    Ok((profile.to_effective(), source_label, Vec::new()))
 }
 
 fn default_max_file_size() -> u64 {
@@ -370,7 +482,9 @@ impl RuntimeProfile {
                 }
             },
             file_selection: FileSelectionConfig {
-                include_hidden: if self.file_selection.include_hidden || self.include_hidden.unwrap_or(false) {
+                include_hidden: if self.file_selection.include_hidden
+                    || self.include_hidden.unwrap_or(false)
+                {
                     true
                 } else {
                     parent.file_selection.include_hidden
@@ -425,7 +539,7 @@ impl RuntimeProfile {
             },
             ai: if self.ai.enabled || !self.ai.prompt.is_empty() {
                 if self.ai.enabled {
-                    self.ai
+                    self.ai.clone()
                 } else {
                     parent.ai.clone()
                 }
@@ -452,23 +566,23 @@ impl RuntimeProfile {
         EffectiveProfile {
             name: self.name.clone(),
             description: self.description.clone(),
-            enabled_rules: self.rules.deterministic_rules,
-            suspicious_patterns: self.rules.suspicious_patterns,
-            prioritize_rules: self.rules.prioritize,
-            min_severity: self.rules.min_severity,
+            enabled_rules: self.rules.deterministic_rules.clone(),
+            suspicious_patterns: self.rules.suspicious_patterns.clone(),
+            prioritize_rules: self.rules.prioritize.clone(),
+            min_severity: self.rules.min_severity.clone(),
             include_hidden: self
                 .include_hidden
                 .unwrap_or(self.file_selection.include_hidden),
-            include_globs: self.file_selection.include_globs,
-            exclude_globs: self.file_selection.exclude_globs,
+            include_globs: self.file_selection.include_globs.clone(),
+            exclude_globs: self.file_selection.exclude_globs.clone(),
             include_binary: self.file_selection.include_binary,
-            limits: self.limits,
+            limits: self.limits.clone(),
             worker_enabled: self.worker.enabled,
             worker_timeout_ms: self.worker.timeout_ms,
             worker_retries: self.worker.retries,
-            ai: self.ai,
+            ai: self.ai.clone(),
             include_content_preview: self.output.include_content_preview,
-            severity_threshold: self.output.severity_threshold,
+            severity_threshold: self.output.severity_threshold.clone(),
         }
     }
 }
@@ -477,6 +591,72 @@ fn is_path_hidden(path: &Path) -> bool {
     path.file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.starts_with('.'))
+}
+
+fn load_ignore_rules(root: &Path) -> Vec<String> {
+    let path = root.join(".dn/ignore");
+    fs::read_to_string(path)
+        .ok()
+        .map(|raw| {
+            raw.lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn is_ignored_by_rules(path: &Path, rules: &[String]) -> bool {
+    let mut candidates = Vec::new();
+    let text = path.to_string_lossy().replace('\\', "/");
+    candidates.push(text.clone());
+    if !text.starts_with('/') {
+        candidates.push(format!("/{text}"));
+    }
+
+    rules.iter().any(|rule| {
+        let glob = Glob::new(rule).or_else(|_| Glob::new(&format!("**/{rule}")));
+        match glob {
+            Ok(glob) => {
+                let matcher = glob.compile_matcher();
+                candidates.iter().any(|c| matcher.is_match(c))
+            }
+            Err(_) => false,
+        }
+    })
+}
+
+fn cache_path(root: &Path) -> PathBuf {
+    root.join(".dn-cache")
+}
+
+fn load_cache(root: &Path) -> ScanCache {
+    fs::read_to_string(cache_path(root))
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or_default()
+}
+
+fn save_cache(root: &Path, cache: &ScanCache) {
+    if let Some(parent) = cache_path(root).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    if let Ok(raw) = serde_json::to_string(cache) {
+        let _ = fs::write(cache_path(root), raw);
+    }
+}
+
+fn content_cache_hash(content: &str) -> String {
+    let bytes = content.as_bytes();
+    let slice = if bytes.len() > 4096 {
+        &bytes[..4096]
+    } else {
+        bytes
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(slice);
+    format!("{:x}", hasher.finalize())
 }
 
 fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
@@ -577,6 +757,60 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                 ],
                 suspicious_patterns: vec!["TODO".to_string(), "FIXME".to_string()],
                 prioritize: vec!["todo-comment".to_string()],
+                min_severity: "info".to_string(),
+            },
+            ..base
+        }),
+        "kernel-c" => Some(RuntimeProfile {
+            name: name.to_string(),
+            description: "Linux kernel C review profile".to_string(),
+            limits: ScanLimits {
+                max_file_size_bytes: 2 * 1024 * 1024,
+                max_file_read_bytes: 64 * 1024,
+                max_total_bytes: 250 * 1024 * 1024,
+                max_files: 25_000,
+            },
+            worker: WorkerProfileConfig {
+                enabled: true,
+                timeout_ms: 15_000,
+                retries: 1,
+            },
+            file_selection: FileSelectionConfig {
+                include_hidden: false,
+                include_globs: vec![
+                    "drivers/**".to_string(),
+                    "fs/**".to_string(),
+                    "include/**".to_string(),
+                    "ipc/**".to_string(),
+                    "kernel/**".to_string(),
+                    "mm/**".to_string(),
+                    "net/**".to_string(),
+                ],
+                exclude_globs: vec![
+                    ".git/**".to_string(),
+                    "Documentation/**".to_string(),
+                    "samples/**".to_string(),
+                    "tools/**".to_string(),
+                ],
+                include_binary: false,
+            },
+            rules: AnalyzerConfig {
+                deterministic_rules: vec![
+                    "todo-comment".to_string(),
+                    "unsafe-usage".to_string(),
+                    "possible-secret".to_string(),
+                    "kernel-style".to_string(),
+                ],
+                suspicious_patterns: vec![
+                    "BUG_ON".to_string(),
+                    "goto out".to_string(),
+                    "printk(".to_string(),
+                ],
+                prioritize: vec![
+                    "kernel-style".to_string(),
+                    "possible-secret".to_string(),
+                    "unsafe-usage".to_string(),
+                ],
                 min_severity: "info".to_string(),
             },
             ..base
@@ -736,6 +970,7 @@ fn detect_language(path: &Path) -> Option<String> {
     match path.extension().and_then(|ext| ext.to_str()) {
         Some("py") => Some("python".to_string()),
         Some("rs") => Some("rust".to_string()),
+        Some("java") => Some("java".to_string()),
         Some("js") => Some("javascript".to_string()),
         Some("ts") => Some("typescript".to_string()),
         Some("tsx") => Some("typescript".to_string()),
@@ -865,6 +1100,42 @@ fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
             rule: "hardcoded-value".to_string(),
             message: "Possible hardcoded credential-like token detected".to_string(),
             category: Some("security".to_string()),
+            line: None,
+            source: Some("local-rules".to_string()),
+        });
+    }
+
+    findings
+}
+
+fn run_local_rules_fast_aware(
+    content: &str,
+    profile: &EffectiveProfile,
+    fast: bool,
+) -> Vec<Finding> {
+    if !fast {
+        return run_local_rules(content, profile);
+    }
+
+    let mut findings = Vec::new();
+
+    if profile.rules_enabled("todo-comment") && content.contains("TODO") {
+        findings.push(Finding {
+            severity: "info".to_string(),
+            rule: "todo-comment".to_string(),
+            message: "TODO marker found in file content".to_string(),
+            category: Some("maintainability".to_string()),
+            line: None,
+            source: Some("local-rules".to_string()),
+        });
+    }
+
+    if profile.rules_enabled("unsafe-usage") && content.contains("unsafe") {
+        findings.push(Finding {
+            severity: "high".to_string(),
+            rule: "unsafe-usage".to_string(),
+            message: "Possible unsafe usage detected".to_string(),
+            category: Some("safety".to_string()),
             line: None,
             source: Some("local-rules".to_string()),
         });
@@ -1073,6 +1344,8 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         ProfileSource::Builtin => "builtin".to_string(),
         ProfileSource::Loaded(path) => format!("file:{}", path.display()),
     };
+    let ignore_rules = load_ignore_rules(&root_path);
+    let mut cache = load_cache(&root_path);
 
     let (include_set, exclude_set) = build_selectors(&profile).context("build selector")?;
     let mut walk = WalkBuilder::new(&root_path);
@@ -1088,9 +1361,13 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
     let mut skipped_large_files = 0usize;
     let mut truncated = false;
     let mut errors = Vec::new();
-    let mut worker_mode = "disabled".to_string();
+    let mut worker_mode = if options.fast {
+        "disabled (fast)".to_string()
+    } else {
+        "disabled".to_string()
+    };
 
-    let mut worker_registry = if profile.worker_enabled {
+    let mut worker_registry = if profile.worker_enabled && !options.fast {
         let registry = WorkerRegistry::new(profile.worker_timeout_ms, profile.worker_retries);
         if let Some(cfg) = registry.get("python") {
             if cfg.retries > 0 {
@@ -1106,6 +1383,9 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
     let review_engine = ReviewEngine::from_config(&profile.ai);
 
     let mut ai_files_used = 0usize;
+
+    let mut pending_batch_c: Vec<(String, String)> = Vec::new();
+    let mut pending_batch_indexes: Vec<usize> = Vec::new();
 
     for entry in walk.build() {
         if total_files_scanned >= profile.limits.max_files
@@ -1149,6 +1429,9 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         if !is_included(relative, &include_set, &exclude_set) {
             continue;
         }
+        if is_ignored_by_rules(relative, &ignore_rules) {
+            continue;
+        }
 
         files_discovered += 1;
 
@@ -1181,30 +1464,80 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         total_bytes = total_bytes.saturating_add(size);
 
         let rel_path = relative.to_string_lossy().to_string();
-        let mut findings = Vec::new();
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
 
         match read_text_preview(&path, profile.limits.max_file_read_bytes) {
             Ok(content) => {
-                findings.extend(run_local_rules(&content, &profile));
+                let content_hash = content_cache_hash(&content);
+                if let Some(entry) = cache.files.get(&rel_path) {
+                    if entry.size == size
+                        && entry.modified == modified
+                        && entry.content_hash == content_hash
+                    {
+                        files.push(FileEntry {
+                            path: rel_path.clone(),
+                            size,
+                            findings: entry.findings.clone(),
+                            content_preview: entry.content_preview.clone(),
+                        });
+                        continue;
+                    }
+                }
 
-                let suspicious = profile
-                    .suspicious_patterns
-                    .iter()
-                    .any(|pat| content.to_lowercase().contains(&pat.to_lowercase()));
+                let mut findings = run_local_rules_fast_aware(&content, &profile, options.fast);
+                let suspicious = !options.fast
+                    && profile
+                        .suspicious_patterns
+                        .iter()
+                        .any(|pat| content.to_lowercase().contains(&pat.to_lowercase()));
 
-                if profile.worker_enabled && suspicious {
-                    let language = detect_language(&path).unwrap_or_else(|| "unknown".to_string());
+                let language = detect_language(&path).unwrap_or_else(|| "unknown".to_string());
+                let file_index = files.len();
+                findings.retain(|finding| {
+                    profile.prioritize_rules.contains(&finding.rule)
+                        || severity_threshold_met(finding, &profile.severity_threshold)
+                });
+
+                let content_preview = if options.include_content || profile.include_content_preview
+                {
+                    Some(content.chars().take(1024).collect())
+                } else {
+                    None
+                };
+
+                files.push(FileEntry {
+                    path: rel_path.clone(),
+                    size,
+                    findings,
+                    content_preview,
+                });
+
+                if profile.worker_enabled && suspicious && language == "c" {
+                    pending_batch_indexes.push(file_index);
+                    pending_batch_c.push((rel_path.clone(), content.clone()));
+                } else if profile.worker_enabled && suspicious {
                     if let Some(registry) = worker_registry.as_mut() {
                         if registry.supports(&language) {
                             match registry.analyze(&language, &rel_path, &content) {
-                                Ok(worker_findings) => findings.extend(worker_findings),
+                                Ok(worker_findings) => {
+                                    files[file_index].findings.extend(worker_findings)
+                                }
                                 Err(err) => errors.push(format!("worker {}: {err}", rel_path)),
                             }
                         }
                     }
                 }
 
-                if profile.ai.enabled && ai_files_used < profile.ai.max_ai_files && suspicious {
+                if profile.ai.enabled
+                    && ai_files_used < profile.ai.max_ai_files
+                    && suspicious
+                    && !options.fast
+                {
                     match review_engine.analyze_file_if_enabled(
                         &profile.ai,
                         AiRequest {
@@ -1215,39 +1548,77 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                         },
                     ) {
                         Ok(ai_findings) => {
-                            findings.extend(ai_findings);
+                            files[file_index].findings.extend(ai_findings);
                             ai_files_used += 1;
                         }
                         Err(err) => errors.push(format!("ai provider {}: {err}", profile.name)),
                     }
                 }
 
-                findings.retain(|finding| {
-                    profile.prioritize_rules.contains(&finding.rule)
-                        || severity_threshold_met(finding, &profile.severity_threshold)
-                });
-
-                findings.sort_by(|a, b| {
+                files[file_index].findings.sort_by(|a, b| {
                     severity_rank(normalize_severity(&b.severity))
                         .cmp(&severity_rank(normalize_severity(&a.severity)))
                 });
+                cache.files.insert(
+                    rel_path,
+                    CacheEntry {
+                        size,
+                        modified,
+                        content_hash,
+                        findings: files[file_index].findings.clone(),
+                        content_preview: files[file_index].content_preview.clone(),
+                    },
+                );
             }
             Err(err) => errors.push(format!("read {}: {err}", rel_path)),
         }
-
-        let content_preview = if options.include_content || profile.include_content_preview {
-            read_text_preview(&path, 1024).ok()
-        } else {
-            None
-        };
-
-        files.push(FileEntry {
-            path: rel_path,
-            size,
-            findings,
-            content_preview,
-        });
     }
+
+    if !pending_batch_c.is_empty() && pending_batch_c.len() >= 4 {
+        if let Some(registry) = worker_registry.as_mut() {
+            match registry.scan_files("c", &pending_batch_c) {
+                Ok(results) => {
+                    for index in pending_batch_indexes {
+                        let path = files[index].path.clone();
+                        if let Some(worker_findings) = results.get(&path) {
+                            files[index].findings.extend(worker_findings.clone());
+                            files[index].findings.sort_by(|a, b| {
+                                severity_rank(normalize_severity(&b.severity))
+                                    .cmp(&severity_rank(normalize_severity(&a.severity)))
+                            });
+                            if let Some(cache_entry) = cache.files.get_mut(&path) {
+                                cache_entry.findings = files[index].findings.clone();
+                            }
+                        }
+                    }
+                    worker_mode = "c-batch".to_string();
+                }
+                Err(err) => errors.push(format!("worker batch c: {err}")),
+            }
+        }
+    } else if !pending_batch_c.is_empty() {
+        if let Some(registry) = worker_registry.as_mut() {
+            for (path, content) in pending_batch_c {
+                match registry.analyze("c", &path, &content) {
+                    Ok(worker_findings) => {
+                        if let Some(file) = files.iter_mut().find(|file| file.path == path) {
+                            file.findings.extend(worker_findings);
+                            file.findings.sort_by(|a, b| {
+                                severity_rank(normalize_severity(&b.severity))
+                                    .cmp(&severity_rank(normalize_severity(&a.severity)))
+                            });
+                            if let Some(cache_entry) = cache.files.get_mut(&path) {
+                                cache_entry.findings = file.findings.clone();
+                            }
+                        }
+                    }
+                    Err(err) => errors.push(format!("worker {}: {err}", path)),
+                }
+            }
+            worker_mode = "c".to_string();
+        }
+    }
+    save_cache(&root_path, &cache);
 
     let files_selected = files.len();
     let mut severity = SeverityStats {
@@ -1273,12 +1644,55 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         severity.info + severity.low + severity.medium + severity.high + severity.critical;
     let files_skipped = files_discovered.saturating_sub(files_selected);
     let worker_summary = if profile.worker_enabled {
-        format!("python:{worker_mode}")
+        worker_mode.clone()
     } else {
         "disabled".to_string()
     };
 
+    let diagnostics: Vec<Diagnostic> = errors
+        .iter()
+        .map(|message| Diagnostic {
+            level: "warning".to_string(),
+            source: "scan".to_string(),
+            code: "runtime".to_string(),
+            message: message.clone(),
+            path: None,
+        })
+        .collect();
+
     Ok(ScanReport {
+        schema_version: "2".to_string(),
+        metadata: ReportMetadata {
+            root: root_path.to_string_lossy().to_string(),
+            profile: profile.name.clone(),
+            profile_source: profile_source.clone(),
+            command: "scan".to_string(),
+            duration_ms: start.elapsed().as_millis(),
+            truncated,
+            summary_only: options.summary_only,
+        },
+        integrations: Integrations {
+            worker: IntegrationStatus {
+                enabled: profile.worker_enabled,
+                mode: worker_mode.clone(),
+                used: profile.worker_enabled,
+                strict: false,
+            },
+            provider: IntegrationStatus {
+                enabled: profile.ai.enabled,
+                mode: review_engine.provider_name().to_string(),
+                used: profile.ai.enabled,
+                strict: false,
+            },
+        },
+        stats: ScanStats {
+            findings_total: total_findings,
+            files_discovered,
+            files_scanned: total_files_scanned,
+            files_selected,
+            files_skipped,
+            severity_breakdown: severity.clone(),
+        },
         root: root_path.to_string_lossy().to_string(),
         profile: profile.name.clone(),
         provider: format!("{}@{}", review_engine.provider_name(), profile_source),
@@ -1286,20 +1700,21 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         profile_source: profile_source.clone(),
         files_discovered,
         files_scanned: total_files_scanned,
-        files_selected,
+        files_selected: if options.summary_only { 0 } else { files_selected },
         files_skipped,
         total_files: files_discovered,
         total_bytes,
         skipped_large_files,
         truncated,
         errors,
-        files,
+        files: if options.summary_only { Vec::new() } else { files },
         severity_breakdown: severity,
         duration_ms: start.elapsed().as_millis(),
         summary: format!(
             "Scanned {files_discovered} files ({total_files_scanned} scanned), {total_findings} findings in {}ms",
             start.elapsed().as_millis()
         ),
+        diagnostics,
     })
 }
 
@@ -1554,7 +1969,12 @@ include_binary = true
         .unwrap();
 
         assert_eq!(report.files.len(), 1);
-        assert!(report.worker.starts_with("python:"));
+        assert!(
+            report.worker == "python"
+                || report.worker == "python (single-shot)"
+                || report.worker == "c"
+                || report.worker == "c-batch"
+        );
         assert!(
             report.errors.is_empty(),
             "unexpected scan errors: {:?}",

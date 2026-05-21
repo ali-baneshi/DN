@@ -1,6 +1,6 @@
 # Compatibility Policy
 
-`dn-kernel` `v1.0.0` treats public behavior as a stable compatibility surface for normal adoption.
+`dn-kernel` `v1.1.0` treats public behavior as a stable compatibility surface for normal adoption.
 
 ## Compatibility surfaces
 
@@ -30,7 +30,7 @@ Rules:
 
 ## Stable change policy
 
-After `v1.0.0`, CLI/schema changes must:
+After `v1.1.0`, CLI/schema changes must:
 
 - be documented in `CHANGELOG.md`
 - update tests in the same patch

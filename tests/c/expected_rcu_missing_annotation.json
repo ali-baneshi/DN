@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "category": "concurrency",
+      "column": 1,
+      "line": 8,
+      "message": "RCU-protected pointer dereference should use rcu_dereference",
+      "rule": "RCU-missing-annotation",
+      "severity": "medium"
+    },
+    {
+      "category": "concurrency",
+      "column": 1,
+      "line": 9,
+      "message": "RCU-protected pointer dereference should use rcu_dereference",
+      "rule": "RCU-missing-annotation",
+      "severity": "medium"
+    }
+  ],
+  "protocol_version": "1.0.0",
+  "request_id": "rcu",
+  "schema_version": "2",
+  "status": "ok"
+}

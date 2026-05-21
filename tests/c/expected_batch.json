@@ -1,0 +1,59 @@
+{
+  "protocol_version": "1.0.0",
+  "request_id": "batch-cases",
+  "results": [
+    {
+      "findings": [
+        {
+          "category": "reliability",
+          "column": 3,
+          "line": 4,
+          "message": "goto out reaches a label without visible cleanup",
+          "rule": "goto-out-without-cleanup",
+          "severity": "medium"
+        }
+      ],
+      "path": "goto_no_cleanup.c"
+    },
+    {
+      "findings": [
+        {
+          "category": "concurrency",
+          "column": 2,
+          "line": 7,
+          "message": "Return occurs while a lock is still held",
+          "rule": "return-without-unlock",
+          "severity": "high"
+        }
+      ],
+      "path": "return_without_unlock.c"
+    },
+    {
+      "findings": [],
+      "path": "negative_clean.c"
+    },
+    {
+      "findings": [
+        {
+          "category": "concurrency",
+          "column": 1,
+          "line": 8,
+          "message": "RCU-protected pointer dereference should use rcu_dereference",
+          "rule": "RCU-missing-annotation",
+          "severity": "medium"
+        },
+        {
+          "category": "concurrency",
+          "column": 1,
+          "line": 9,
+          "message": "RCU-protected pointer dereference should use rcu_dereference",
+          "rule": "RCU-missing-annotation",
+          "severity": "medium"
+        }
+      ],
+      "path": "rcu_missing_annotation.c"
+    }
+  ],
+  "schema_version": "2",
+  "status": "ok"
+}

@@ -9,6 +9,7 @@ typedef struct {
     char message[256];
     int line;
     int column;
+    char category[64];
 } Issue;
 
 typedef struct {

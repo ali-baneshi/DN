@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "category": "reliability",
+      "column": 3,
+      "line": 4,
+      "message": "goto out reaches a label without visible cleanup",
+      "rule": "goto-out-without-cleanup",
+      "severity": "medium"
+    }
+  ],
+  "protocol_version": "1.0.0",
+  "request_id": "goto-no-cleanup",
+  "schema_version": "2",
+  "status": "ok"
+}

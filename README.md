@@ -1,6 +1,7 @@
 # dn-kernel
 
 [![Rust](https://img.shields.io/badge/Rust-CLI%20%26%20runtime-000000?logo=rust)](https://www.rust-lang.org/)
+[![C](https://img.shields.io/badge/C-worker%20for%20kernel%20scans-00599C?logo=c&logoColor=white)](workers/c)
 [![Python](https://img.shields.io/badge/Python-worker-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![TOML](https://img.shields.io/badge/TOML-profiles-9C4121)](https://toml.io/)
 [![YAML](https://img.shields.io/badge/YAML-profiles-CB171E?logo=yaml&logoColor=white)](https://yaml.org/)
@@ -9,6 +10,8 @@
 [![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI%2Fsmoke%2Fdocs-2088FF?logo=githubactions&logoColor=white)](https://github.com/features/actions)
 
 `dn-kernel` is a local-first repository review CLI for scanning source trees and producing structured, repeatable findings for maintainers, reviewers, and CI pipelines.
+
+It now includes a kernel-ready C worker for Linux kernel style and safety review.
 
 It sits between ad-hoc grep scripts and heavyweight security/review platforms: fast enough to run locally, explicit enough to trust in automation, and small enough to extend without losing control of the trust boundary.
 
@@ -111,6 +114,10 @@ If you are exploring provider-backed review or worker-driven language analysis, 
 `dn-kernel` focuses on a few things deliberately:
 
 - deterministic repository scanning
+- `--fast` mode with worker/provider bypass and cache reuse
+- content-hashed `.dn-cache` entries
+- `.dn/ignore` glob support
+- kernel-focused C worker with batched parallel scanning
 - profile-driven behavior
 - bounded analysis with explicit file and byte limits
 - structured diagnostics instead of silent failure
@@ -178,7 +185,7 @@ The current registry now includes 19 built-in deterministic rules spanning maint
 
 ## Current status
 
-`dn-kernel` `v1.0.0` is the first stable public release and is intended to be adoptable for local use, CI experiments, and maintainers preparing or auditing repositories.
+`dn-kernel` `v1.1.0` is the current stable release target and is intended to be adoptable for local use, CI experiments, and maintainers preparing or auditing repositories.
 
 Current guarantees:
 
@@ -194,6 +201,7 @@ Current guarantees:
 
 ```bash
 cargo build --workspace
+make -C workers/c
 cargo run -p dn-cli -- scan . --profile quick
 ```
 
@@ -203,6 +211,17 @@ cargo run -p dn-cli -- scan . --profile quick
 cargo install --path apps/dn-cli
 dn-cli scan . --profile quick
 ```
+
+## Kernel scanning
+
+Use the built-in `kernel-c` profile to scan Linux kernel subtrees locally:
+
+```bash
+dn-cli scan ~/src/linux --profile kernel-c --json
+dn-cli scan ~/src/linux/drivers --profile kernel-c --fast
+```
+
+`--fast` keeps the run deterministic and local-only by skipping worker and provider analysis while still using the content-hashed cache.
 
 ## Common commands
 
@@ -216,6 +235,7 @@ dn-cli validate-profile examples/profiles/my-security.toml . --json
 dn-cli doctor . --json
 dn-cli rules --json
 dn-cli fix . --profile quick --dry-run --json
+sh tests/c/run.sh
 ```
 
 ## Command surface

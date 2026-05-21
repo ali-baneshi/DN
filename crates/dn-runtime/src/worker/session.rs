@@ -2,7 +2,12 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use anyhow::{anyhow, Result};
-use dn_ipc::{WorkerFinding, WorkerRequest, PROTOCOL_VERSION};
+use std::collections::HashMap;
+
+use dn_ipc::{
+    WorkerAnalyzeFileParams, WorkerFinding, WorkerParams, WorkerRequest, WorkerScanFileParams,
+    PROTOCOL_VERSION,
+};
 
 use crate::Finding;
 
@@ -145,11 +150,11 @@ impl WorkerSession {
             protocol_version: PROTOCOL_VERSION.to_string(),
             request_id: request_id.clone(),
             method: "analyze_file".to_string(),
-            params: dn_ipc::WorkerAnalyzeFileParams {
+            params: WorkerParams::AnalyzeFile(WorkerAnalyzeFileParams {
                 path: path.to_string(),
                 language: language.map(str::to_string),
                 content: content.to_string(),
-            },
+            }),
         };
 
         let payload = serde_json::to_string(&request)?;
@@ -190,19 +195,61 @@ impl WorkerSession {
                 .unwrap_or_else(|| "worker returned non-ok status".to_string())));
         }
 
+        Ok(map_findings("worker", response.findings))
+    }
+
+    pub fn scan_files(
+        &mut self,
+        language: &str,
+        files: &[(String, String)],
+    ) -> Result<HashMap<String, Vec<Finding>>> {
+        if !self.handshake_done {
+            self.handshake()?;
+            self.handshake_done = true;
+        }
+
+        self.request_seq = self.request_seq.saturating_add(1);
+        let request_id = format!("scan-batch-{}", self.request_seq);
+        let request = WorkerRequest {
+            protocol_version: PROTOCOL_VERSION.to_string(),
+            request_id: request_id.clone(),
+            method: "scan_files".to_string(),
+            params: WorkerParams::ScanFiles {
+                files: files
+                    .iter()
+                    .map(|(path, content)| WorkerScanFileParams {
+                        path: path.clone(),
+                        language: Some(language.to_string()),
+                        content: content.clone(),
+                    })
+                    .collect(),
+            },
+        };
+
+        let payload = serde_json::to_string(&request)?;
+        self.stdin.write_all(format!("{payload}\n").as_bytes())?;
+        self.stdin.flush()?;
+
+        let line = read_bounded_line(&mut self.stdout, MAX_WORKER_RESPONSE_BYTES)?;
+        let response: dn_ipc::WorkerResponse = serde_json::from_str(&line)
+            .map_err(|err| anyhow!("failed parsing worker batch response: {err}"))?;
+
+        if response.protocol_version != PROTOCOL_VERSION || response.request_id != request_id {
+            return Err(anyhow!("unexpected worker batch response"));
+        }
+        if response.status != "ok" {
+            return Err(anyhow!(
+                "{}",
+                response
+                    .error
+                    .unwrap_or_else(|| "worker batch returned non-ok status".to_string())
+            ));
+        }
+
         Ok(response
-            .findings
+            .results
             .into_iter()
-            .take(MAX_WORKER_FINDINGS)
-            .map(|finding: WorkerFinding| Finding {
-                rule: truncate_field(&finding.rule, 256),
-                severity: validate_worker_severity(&finding.severity),
-                message: truncate_field(&finding.message, MAX_WORKER_FIELD_LEN),
-                category: finding.category.map(|c| truncate_field(&c, 256)),
-                line: finding.line,
-                source: Some("worker:python".to_string()),
-                origin: "worker".to_string(),
-            })
+            .map(|entry| (entry.path, map_findings("worker:c", entry.findings)))
             .collect())
     }
 
@@ -245,4 +292,19 @@ impl WorkerSession {
 
         Ok(())
     }
+}
+
+fn map_findings(source: &str, findings: Vec<WorkerFinding>) -> Vec<Finding> {
+    findings
+        .into_iter()
+        .take(MAX_WORKER_FINDINGS)
+        .map(|finding: WorkerFinding| Finding {
+            rule: truncate_field(&finding.rule, 256),
+            severity: validate_worker_severity(&finding.severity),
+            message: truncate_field(&finding.message, MAX_WORKER_FIELD_LEN),
+            category: finding.category.map(|c| truncate_field(&c, 256)),
+            line: finding.line,
+            source: Some(source.to_string()),
+        })
+        .collect()
 }

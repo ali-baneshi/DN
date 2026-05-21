@@ -1,0 +1,24 @@
+{
+  "findings": [
+    {
+      "category": "concurrency",
+      "column": 1,
+      "line": 3,
+      "message": "Sleeping or blocking call appears in atomic context",
+      "rule": "sleeping-in-atomic",
+      "severity": "high"
+    },
+    {
+      "category": "concurrency",
+      "column": 1,
+      "line": 8,
+      "message": "Sleeping or blocking call appears in atomic context",
+      "rule": "sleeping-in-atomic",
+      "severity": "high"
+    }
+  ],
+  "protocol_version": "1.0.0",
+  "request_id": "sleeping-in-atomic",
+  "schema_version": "2",
+  "status": "ok"
+}

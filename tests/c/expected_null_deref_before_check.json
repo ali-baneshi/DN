@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "category": "correctness",
+      "column": 1,
+      "line": 7,
+      "message": "Pointer is dereferenced before it is checked for NULL",
+      "rule": "null-deref-before-check",
+      "severity": "high"
+    }
+  ],
+  "protocol_version": "1.0.0",
+  "request_id": "null-deref",
+  "schema_version": "2",
+  "status": "ok"
+}

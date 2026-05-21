@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-gnu]
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -19,13 +19,20 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Build binary
         run: cargo build --release -p dn-cli --target ${{ matrix.target }}
+      - name: Build C worker
+        run: make -C workers/c
       - name: Package archive
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/dn-cli dist/dn-cli
-          tar -czf dn-kernel-${{ github.ref_name }}-${{ matrix.target }}.tar.gz -C dist dn-cli
+          cp workers/c/dn-worker-c dist/dn-worker-c
+          tar -czf dn-kernel-${{ github.ref_name }}-${{ matrix.target }}.tar.gz -C dist dn-cli dn-worker-c
       - name: Upload archive artifact
         uses: actions/upload-artifact@v4
         with:
           name: dn-kernel-${{ matrix.target }}
           path: dn-kernel-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+      - name: Upload release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dn-kernel-${{ github.ref_name }}-${{ matrix.target }}.tar.gz

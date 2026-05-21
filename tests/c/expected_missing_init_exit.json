@@ -1,0 +1,16 @@
+{
+  "findings": [
+    {
+      "category": "lifecycle",
+      "column": 1,
+      "line": 1,
+      "message": "Inconsistent __init/__exit annotation markers in this file",
+      "rule": "missing-__init-__exit",
+      "severity": "medium"
+    }
+  ],
+  "protocol_version": "1.0.0",
+  "request_id": "init-exit",
+  "schema_version": "2",
+  "status": "ok"
+}

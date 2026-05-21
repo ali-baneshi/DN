@@ -235,6 +235,24 @@ max_files = 20
 }
 
 #[test]
+fn c_worker_golden_tests_pass() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..");
+    let output = Command::new("sh")
+        .arg("tests/c/run.sh")
+        .current_dir(&root)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn cli_custom_local_profile_loading_from_scan_root() {
     let dir = temp_dir("custom-profile-cli");
     let profile_dir = dir.join(".dn/profiles");

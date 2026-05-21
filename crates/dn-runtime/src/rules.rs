@@ -175,7 +175,6 @@ fn push(
             category: Some(category.to_string()),
             line,
             source: Some("rule-registry".to_string()),
-            origin: "deterministic".to_string(),
         },
         fix,
     });

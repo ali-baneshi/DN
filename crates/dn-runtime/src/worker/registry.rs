@@ -48,6 +48,20 @@ impl WorkerRegistry {
             );
         }
 
+        let c_worker = root.join("c").join("dn-worker-c");
+        if let Some(command) = resolve_worker_binary(&c_worker, &["dn-worker-c"]) {
+            registry.register(
+                "c",
+                WorkerConfig {
+                    command,
+                    args: vec![c_worker.to_string_lossy().to_string()],
+                    timeout_ms: worker_timeout_ms,
+                    retries: worker_retries,
+                    preflight: vec!["c-worker".to_string()],
+                },
+            );
+        }
+
         let java_script = root.join("java").join("dn_worker.py");
         if let Some(command) = resolve_runtime_command(&java_script, &["python3", "python"]) {
             registry.register(
@@ -131,6 +145,31 @@ impl WorkerRegistry {
             }
         }
     }
+
+    pub fn scan_files(
+        &mut self,
+        language: &str,
+        files: &[(String, String)],
+    ) -> Result<std::collections::HashMap<String, Vec<Finding>>> {
+        if !self.sessions.contains_key(language) {
+            let config = self
+                .workers
+                .get(language)
+                .ok_or_else(|| anyhow::anyhow!("no worker registered for language: {language}"))?;
+            if !worker_script_is_safe(&config.args) {
+                return Err(anyhow::anyhow!(
+                    "worker script path is missing or unsafe for language: {language}"
+                ));
+            }
+            let session = WorkerSession::new(&config.command, &config.args)?;
+            self.sessions.insert(language.to_string(), session);
+        }
+
+        self.sessions
+            .get_mut(language)
+            .ok_or_else(|| anyhow::anyhow!("worker session unavailable for {language}"))?
+            .scan_files(language, files)
+    }
 }
 
 fn resolve_runtime_command(script_path: &Path, candidates: &[&str]) -> Option<String> {
@@ -163,4 +202,25 @@ fn worker_script_is_safe(args: &[String]) -> bool {
         return false;
     }
     fs::canonicalize(script).is_ok()
+}
+
+fn resolve_worker_binary(binary_path: &Path, candidates: &[&str]) -> Option<String> {
+    if binary_path.is_file() {
+        return Some(binary_path.to_string_lossy().to_string());
+    }
+
+    for candidate in candidates {
+        if Command::new(candidate)
+            .arg("--help")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+        {
+            return Some((*candidate).to_string());
+        }
+    }
+
+    None
 }

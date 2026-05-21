@@ -23,11 +23,33 @@ pub struct WorkerAnalyzeFileParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkerScanFileParams {
+    pub path: String,
+    pub language: Option<String>,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum WorkerParams {
+    AnalyzeFile(WorkerAnalyzeFileParams),
+    ScanFiles { files: Vec<WorkerScanFileParams> },
+    Empty(serde_json::Value),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkerRequest {
     pub protocol_version: String,
     pub request_id: String,
     pub method: String,
-    pub params: WorkerAnalyzeFileParams,
+    pub params: WorkerParams,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkerBatchResult {
+    pub path: String,
+    #[serde(default)]
+    pub findings: Vec<WorkerFinding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -37,6 +59,8 @@ pub struct WorkerResponse {
     pub status: String,
     #[serde(default)]
     pub findings: Vec<WorkerFinding>,
+    #[serde(default)]
+    pub results: Vec<WorkerBatchResult>,
     #[serde(default)]
     pub error: Option<String>,
 }
@@ -48,6 +72,8 @@ pub struct WorkerFinding {
     pub message: String,
     #[serde(default)]
     pub line: Option<u32>,
+    #[serde(default)]
+    pub column: Option<u32>,
     #[serde(default)]
     pub category: Option<String>,
 }

@@ -27,6 +27,7 @@ Profiles are resolved in this order:
 - `strict`
 - `educational`
 - `production-readiness`
+- `kernel-c`
 
 ## Recommended starting points
 
@@ -36,6 +37,7 @@ If you want a profile that people can adopt quickly in an open-source project, s
 - `pre-merge`: CI-friendly gate with bounded limits
 - `security`: suspicious-pattern review with worker/provider hooks enabled
 - `production-readiness`: stronger maintainability and safety bias for release prep
+- `kernel-c`: Linux-kernel-oriented C scanning with the C worker enabled
 
 Tracked examples under `examples/profiles/` are meant to be copied and edited:
 
