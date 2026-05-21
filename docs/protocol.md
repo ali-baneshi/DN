@@ -1,13 +1,18 @@
 # Worker Protocol
 
-Worker integrations use newline-delimited JSON over stdio. The current repository includes Python, Java, and TypeScript/JavaScript worker implementations.
-The runtime uses the shared request/response shape from `crates/dn-ipc`.
+Workers communicate with the runtime through a simple protocol.
+
+The Python worker uses newline-delimited JSON over stdio.
+The runtime uses the shared request/response shape from `crates/dn-ipc`:
+
+- request: `WorkerRequest`
+- response: `WorkerResponse`
 
 ## Request shape
 
 ```json
 {
-  "protocol_version": "1.0.0",
+  "protocol_version": "0.1.0",
   "request_id": "scan-1",
   "method": "analyze_file",
   "params": {
@@ -22,7 +27,7 @@ The runtime uses the shared request/response shape from `crates/dn-ipc`.
 
 ```json
 {
-  "protocol_version": "1.0.0",
+  "protocol_version": "0.1.0",
   "request_id": "scan-1",
   "status": "ok",
   "findings": [
@@ -37,26 +42,53 @@ The runtime uses the shared request/response shape from `crates/dn-ipc`.
 }
 ```
 
+`status` may be `error` with an `error` field.
+
 ## Session flow
 
-1. runtime starts the worker process
-2. runtime sends one `hello` request per worker lifecycle
-3. runtime sends `analyze_file` for suspicious files
-4. worker returns one response per request
+1. Runtime starts worker process `python workers/python/dn_worker.py`.
+2. Runtime sends one `hello` request once per process lifecycle.
+3. For each suspicious file, runtime sends `analyze_file` requests.
+4. Worker parses each request and writes back one JSON response per request.
 
-## Runtime behavior
+## C Worker Protocol
 
-- worker findings become report findings with `origin = "worker"`
-- worker failures are emitted as structured diagnostics
-- `--strict-integrations` can convert worker failures to hard scan failures
-- request IDs are validated to avoid cross-request drift
+The C worker uses a simpler command-line interface:
+
+### Invocation
+
+```bash
+./dn-worker-c <file.c>
+```
+
+### Output format
+
+```json
+{
+  "file": "example.c",
+  "issues": [
+    {
+      "rule": "line-length",
+      "severity": "warning",
+      "message": "Line exceeds 80 characters (95 characters)",
+      "line": 10,
+      "column": 1
+    }
+  ]
+}
+```
+
+## Versioning and compatibility
+
+Current protocol version is `0.1.0`.
+
+The runtime validates `request_id` for each worker response to avoid cross-request drift.
 
 ## Failure modes
 
-- worker spawn failure
-- malformed worker response JSON
-- empty worker response
-- request/response ID mismatch
-- explicit worker `error` status
+- Worker spawn failure (`python` binary missing, bad script path): captured as diagnostic and scan continues.
+- Malformed worker response JSON: diagnostic is recorded and analysis continues.
+- Worker request error: diagnostic is recorded and scan continues.
+- If multiple worker attempts fail, the request is retried according to profile retry policy.
 
-By default the scanner prefers completion with diagnostics over hard failure.
+The scanner intentionally prefers scan completion over hard failure when worker communication breaks.

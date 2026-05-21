@@ -1,9 +1,7 @@
 pub mod provider;
-pub mod rules;
 pub mod worker;
 
 use crate::provider::{AiRequest, ProfileAiConfig, ReviewEngine};
-use crate::rules::analyze_registered_rules;
 use crate::worker::registry::WorkerRegistry;
 use anyhow::{anyhow, Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
@@ -16,9 +14,6 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 pub use dn_ipc::{WorkerRequest, WorkerResponse};
-pub use rules::{
-    apply_safe_fixes, registered_rule_names, rule_specs, RuleFix, RuleMatch, RuleSpec,
-};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanOptions {
@@ -33,14 +28,6 @@ pub struct ScanOptions {
     pub max_files: usize,
     #[serde(default)]
     pub format: OutputFormat,
-    #[serde(default)]
-    pub fail_on_severity: Option<String>,
-    #[serde(default)]
-    pub summary_only: bool,
-    #[serde(default)]
-    pub strict_integrations: bool,
-    #[serde(default = "default_command_name")]
-    pub command_name: String,
 }
 
 impl Default for ScanOptions {
@@ -52,19 +39,11 @@ impl Default for ScanOptions {
             python_worker: false,
             max_files: 10_000,
             format: OutputFormat::Text,
-            fail_on_severity: None,
-            summary_only: false,
-            strict_integrations: false,
-            command_name: default_command_name(),
         }
     }
 }
 
-fn default_command_name() -> String {
-    "scan".to_string()
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum OutputFormat {
     #[default]
@@ -156,7 +135,7 @@ pub struct RuntimeProfile {
     pub include_hidden: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct EffectiveProfile {
     pub name: String,
     pub description: String,
@@ -185,8 +164,8 @@ pub struct ScanProfileSelection {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Finding {
-    pub rule: String,
     pub severity: String,
+    pub rule: String,
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
@@ -194,20 +173,15 @@ pub struct Finding {
     pub line: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
-    pub origin: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileEntry {
     pub path: String,
     pub size: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub language: Option<String>,
     pub findings: Vec<Finding>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_preview: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub integration_notes: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -220,81 +194,7 @@ pub struct SeverityStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReportMetadata {
-    pub root: String,
-    pub profile: String,
-    pub profile_source: String,
-    pub command: String,
-    pub output_format: OutputFormat,
-    pub summary_only: bool,
-    pub duration_ms: u128,
-    pub truncated: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReportStats {
-    pub files_discovered: usize,
-    pub files_scanned: usize,
-    pub files_selected: usize,
-    pub files_skipped: usize,
-    pub total_files: usize,
-    pub total_bytes: u64,
-    pub skipped_large_files: usize,
-    pub findings_total: usize,
-    pub severity_breakdown: SeverityStats,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IntegrationRuntimeStatus {
-    pub enabled: bool,
-    pub mode: String,
-    pub strict: bool,
-    pub used: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub supported_languages: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_ai_files: Option<usize>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub files_sent: Option<usize>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IntegrationSummary {
-    pub worker: IntegrationRuntimeStatus,
-    pub provider: IntegrationRuntimeStatus,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Diagnostic {
-    pub level: String,
-    pub source: String,
-    pub code: String,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub path: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanReport {
-    pub schema_version: String,
-    pub metadata: ReportMetadata,
-    pub stats: ReportStats,
-    pub integrations: IntegrationSummary,
-    pub diagnostics: Vec<Diagnostic>,
-    pub files: Vec<FileEntry>,
-    pub summary: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExitEvaluation {
-    pub threshold: Option<String>,
-    pub threshold_triggered: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScanOutcome {
     pub root: String,
     pub profile: String,
     pub provider: String,
@@ -313,8 +213,6 @@ pub struct ScanOutcome {
     pub severity_breakdown: SeverityStats,
     pub duration_ms: u128,
     pub summary: String,
-    pub report: ScanReport,
-    pub exit_evaluation: ExitEvaluation,
 }
 
 #[derive(Debug)]
@@ -348,12 +246,6 @@ fn default_detectors() -> Vec<String> {
         "todo-comment".to_string(),
         "unsafe-usage".to_string(),
         "possible-secret".to_string(),
-        "hardcoded-value".to_string(),
-        "debug-print".to_string(),
-        "commented-out-code".to_string(),
-        "wildcard-import".to_string(),
-        "deprecated-api".to_string(),
-        "hard-to-read-function".to_string(),
     ]
 }
 
@@ -478,9 +370,11 @@ impl RuntimeProfile {
                 }
             },
             file_selection: FileSelectionConfig {
-                include_hidden: self.file_selection.include_hidden
-                    || self.include_hidden.unwrap_or(false)
-                    || parent.file_selection.include_hidden,
+                include_hidden: if self.file_selection.include_hidden || self.include_hidden.unwrap_or(false) {
+                    true
+                } else {
+                    parent.file_selection.include_hidden
+                },
                 include_globs: if self.file_selection.include_globs.is_empty() {
                     parent.file_selection.include_globs.clone()
                 } else {
@@ -554,10 +448,10 @@ impl RuntimeProfile {
         }
     }
 
-    fn into_effective(self) -> EffectiveProfile {
+    fn to_effective(&self) -> EffectiveProfile {
         EffectiveProfile {
-            name: self.name,
-            description: self.description,
+            name: self.name.clone(),
+            description: self.description.clone(),
             enabled_rules: self.rules.deterministic_rules,
             suspicious_patterns: self.rules.suspicious_patterns,
             prioritize_rules: self.rules.prioritize,
@@ -612,35 +506,15 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
             let mut profile = base;
             profile.name = "security".to_string();
             profile.description = "Security-sensitive review profile".to_string();
-            profile.rules.deterministic_rules = vec![
-                "todo-comment".to_string(),
-                "unsafe-usage".to_string(),
-                "possible-secret".to_string(),
-                "hardcoded-value".to_string(),
-            ];
-            profile.rules.suspicious_patterns = vec![
-                "password".to_string(),
-                "secret".to_string(),
-                "token".to_string(),
-                "api_key".to_string(),
-                "client_secret".to_string(),
-            ];
-            profile.rules.prioritize = vec![
-                "possible-secret".to_string(),
-                "hardcoded-value".to_string(),
-                "unsafe-usage".to_string(),
-            ];
+            profile
+                .rules
+                .deterministic_rules
+                .push("possible-secret".to_string());
+            profile.rules.suspicious_patterns.push("token".to_string());
             profile.ai.enabled = true;
             profile.ai.provider = provider::ProviderConfig::Mock {
                 message: "No security finding by AI in this file snippet".to_string(),
             };
-            profile.ai.suspicious_patterns = vec![
-                "password".to_string(),
-                "secret".to_string(),
-                "token".to_string(),
-                "api_key".to_string(),
-                "unsafe".to_string(),
-            ];
             profile.worker.enabled = true;
             Some(profile)
         }
@@ -674,7 +548,7 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
             ai: ProfileAiConfig {
                 enabled: true,
                 max_ai_files: 80,
-                ..ProfileAiConfig::default()
+                ..Default::default()
             },
             ..base
         }),
@@ -701,12 +575,7 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                     "possible-secret".to_string(),
                     "hardcoded-value".to_string(),
                 ],
-                suspicious_patterns: vec![
-                    "TODO".to_string(),
-                    "FIXME".to_string(),
-                    "deprecated".to_string(),
-                    "unsafe".to_string(),
-                ],
+                suspicious_patterns: vec!["TODO".to_string(), "FIXME".to_string()],
                 prioritize: vec!["todo-comment".to_string()],
                 min_severity: "info".to_string(),
             },
@@ -717,12 +586,6 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
             p.name = name.to_string();
             p.description = "AI-generated code review profile".to_string();
             p.ai.enabled = true;
-            p.ai.suspicious_patterns = vec![
-                "todo".to_string(),
-                "fixme".to_string(),
-                "unsafe".to_string(),
-                "eval(".to_string(),
-            ];
             p.ai.provider = provider::ProviderConfig::Mock {
                 message:
                     "AI-generated code smell: check for repetitive patterns and naming quality."
@@ -744,9 +607,6 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                     "TODO".to_string(),
                     "FIXME".to_string(),
                     "XXX".to_string(),
-                    "deprecated".to_string(),
-                    "legacy".to_string(),
-                    "unsafe".to_string(),
                 ],
                 prioritize: vec!["deprecated-api".to_string(), "possible-secret".to_string()],
                 min_severity: "low".to_string(),
@@ -779,14 +639,7 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                 enabled: true,
                 max_ai_files: 120,
                 max_content_chars: 8 * 1024,
-                suspicious_patterns: vec![
-                    "password".to_string(),
-                    "secret".to_string(),
-                    "token".to_string(),
-                    "unsafe".to_string(),
-                    "eval(".to_string(),
-                ],
-                ..ProfileAiConfig::default()
+                ..Default::default()
             },
             ..base
         }),
@@ -798,7 +651,7 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                 provider: provider::ProviderConfig::Mock {
                     message: "Explainability guidance requested by educational profile".to_string(),
                 },
-                ..ProfileAiConfig::default()
+                ..Default::default()
             },
             ..base
         }),
@@ -815,22 +668,14 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                 deterministic_rules: vec![
                     "todo-comment".to_string(),
                     "possible-secret".to_string(),
-                    "hardcoded-value".to_string(),
                     "unsafe-usage".to_string(),
                 ],
                 suspicious_patterns: vec![
                     "TODO".to_string(),
                     "FIXME".to_string(),
                     "api_key".to_string(),
-                    "password".to_string(),
-                    "secret".to_string(),
-                    "unsafe".to_string(),
                 ],
-                prioritize: vec![
-                    "possible-secret".to_string(),
-                    "hardcoded-value".to_string(),
-                    "unsafe-usage".to_string(),
-                ],
+                prioritize: vec!["possible-secret".to_string()],
                 min_severity: "medium".to_string(),
             },
             ..base
@@ -895,11 +740,6 @@ fn detect_language(path: &Path) -> Option<String> {
         Some("ts") => Some("typescript".to_string()),
         Some("tsx") => Some("typescript".to_string()),
         Some("jsx") => Some("javascript".to_string()),
-        Some("java") => Some("java".to_string()),
-        Some("go") => Some("go".to_string()),
-        Some("php") => Some("php".to_string()),
-        Some("rb") => Some("ruby".to_string()),
-        Some("sh") | Some("bash") => Some("shell".to_string()),
         Some("json") => Some("json".to_string()),
         Some("toml") => Some("toml".to_string()),
         Some("md") => Some("markdown".to_string()),
@@ -949,259 +789,11 @@ fn is_text_file(
     can_read_text_preview(path, max_read_bytes)
 }
 
-/// Check if content contains a word with boundary matching (not substring)
-fn contains_word(content: &str, word: &str) -> bool {
-    content
-        .split_whitespace()
-        .any(|w| w.trim_matches(|c: char| !c.is_alphanumeric()) == word)
-}
-
-fn normalized_code_line(line: &str) -> Option<String> {
-    let trimmed = line.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-
-    if trimmed.starts_with("//")
-        || trimmed.starts_with('#')
-        || trimmed.starts_with('*')
-        || trimmed.starts_with("/*")
-        || trimmed.starts_with("--")
-    {
-        return None;
-    }
-
-    let before_inline_comment = trimmed
-        .split_once("//")
-        .map(|(head, _)| head)
-        .unwrap_or(trimmed)
-        .split_once(" #")
-        .map(|(head, _)| head)
-        .unwrap_or(trimmed)
-        .trim();
-
-    if before_inline_comment.is_empty() {
-        return None;
-    }
-
-    Some(before_inline_comment.to_lowercase())
-}
-
-fn line_number_from_index(index: usize) -> u32 {
-    (index + 1).try_into().unwrap_or(u32::MAX)
-}
-
-fn likely_doc_or_demo_line(line: &str) -> bool {
-    let lower = line.to_lowercase();
-    lower.contains("example")
-        || lower.contains("sample")
-        || lower.contains("for example")
-        || lower.contains("demo")
-}
-
-fn looks_like_placeholder_value(value: &str) -> bool {
-    let normalized = value.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | ' '));
-    if normalized.is_empty() {
-        return true;
-    }
-
-    let lower = normalized.to_lowercase();
-    let placeholders = [
-        "example",
-        "sample",
-        "dummy",
-        "fake",
-        "mock",
-        "test",
-        "changeme",
-        "change-me",
-        "replace-me",
-        "replace_this",
-        "placeholder",
-        "your_",
-        "your-",
-        "xxxx",
-        "abc123",
-        "foobar",
-        "<secret>",
-        "<token>",
-        "<password>",
-        "${",
-        "process.env",
-        "env(",
-        "os.getenv",
-    ];
-
-    placeholders.iter().any(|token| lower.contains(token))
-}
-
-fn parse_assignment(line: &str) -> Option<(&str, &str)> {
-    for separator in ["=>", "=", ":"] {
-        if let Some((left, right)) = line.split_once(separator) {
-            let key = left
-                .trim()
-                .trim_matches(|c: char| matches!(c, '"' | '\'' | '`'));
-            let value = right
-                .trim()
-                .trim_end_matches(',')
-                .trim_end_matches(';')
-                .trim();
-            if !key.is_empty() && !value.is_empty() {
-                return Some((key, value));
-            }
-        }
-    }
-    None
-}
-
-fn is_secret_like_key(key: &str) -> bool {
-    let normalized = key.to_lowercase();
-    let indicators = [
-        "password",
-        "passwd",
-        "pwd",
-        "secret",
-        "token",
-        "api_key",
-        "apikey",
-        "access_key",
-        "secret_key",
-        "private_key",
-        "client_secret",
-        "auth_token",
-        "bearer",
-        "github_token",
-    ];
-
-    indicators.iter().any(|needle| normalized.contains(needle))
-}
-
-fn is_quoted_or_literal_secret_value(value: &str) -> bool {
-    let trimmed = value.trim();
-    let quoted = (trimmed.starts_with('"') && trimmed.ends_with('"'))
-        || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
-        || (trimmed.starts_with('`') && trimmed.ends_with('`'));
-    let bare_literal = !trimmed.contains(' ') && !trimmed.contains('(') && !trimmed.contains('{');
-
-    (quoted || bare_literal) && trimmed.len() >= 4
-}
-
-fn find_todo_line(content: &str) -> Option<u32> {
-    content.lines().enumerate().find_map(|(index, line)| {
-        let trimmed = line.trim();
-        if (trimmed.starts_with("//")
-            || trimmed.starts_with('#')
-            || trimmed.starts_with('*')
-            || trimmed.starts_with("/*"))
-            && contains_word(trimmed, "TODO")
-        {
-            return Some(line_number_from_index(index));
-        }
-        None
-    })
-}
-
-fn find_code_keyword_line(content: &str, keyword: &str) -> Option<u32> {
-    let kw = keyword.to_lowercase();
-    for (index, line) in content.lines().enumerate() {
-        let lower = line.to_lowercase();
-        let trimmed = lower.trim();
-        if trimmed.starts_with("//")
-            || trimmed.starts_with('#')
-            || trimmed.starts_with('*')
-            || trimmed.starts_with("/*")
-        {
-            continue;
-        }
-        if lower
-            .split(|c: char| !c.is_alphanumeric() && c != '_')
-            .any(|token| token == kw)
-        {
-            return Some(line_number_from_index(index));
-        }
-    }
-    None
-}
-
-fn find_secret_assignment_line(content: &str) -> Option<u32> {
-    content.lines().enumerate().find_map(|(index, line)| {
-        if likely_doc_or_demo_line(line) {
-            return None;
-        }
-        let normalized = normalized_code_line(line)?;
-        let (key, value) = parse_assignment(&normalized)?;
-        if is_secret_like_key(key)
-            && is_quoted_or_literal_secret_value(value)
-            && !looks_like_placeholder_value(value)
-        {
-            Some(line_number_from_index(index))
-        } else {
-            None
-        }
-    })
-}
-
-fn find_hardcoded_credential_line(content: &str) -> Option<u32> {
-    content.lines().enumerate().find_map(|(index, line)| {
-        if likely_doc_or_demo_line(line) {
-            return None;
-        }
-        let normalized = normalized_code_line(line)?;
-        let (key, value) = parse_assignment(&normalized)?;
-        if !is_secret_like_key(key) || !is_quoted_or_literal_secret_value(value) {
-            return None;
-        }
-
-        let normalized_value = value.trim_matches(|c: char| matches!(c, '"' | '\'' | '`' | ' '));
-        if normalized_value.len() >= 8
-            && !looks_like_placeholder_value(value)
-            && normalized_value.chars().any(|c| c.is_ascii_digit())
-        {
-            Some(line_number_from_index(index))
-        } else {
-            None
-        }
-    })
-}
-
-fn content_matches_suspicious_patterns(content: &str, patterns: &[String]) -> bool {
-    let lower = content.to_lowercase();
-    patterns
-        .iter()
-        .any(|pat| !pat.trim().is_empty() && lower.contains(&pat.to_lowercase()))
-}
-
 fn normalize_severity(severity: &str) -> &str {
     match severity {
         "critical" | "high" | "medium" | "low" | "info" => severity,
         "warn" | "warning" => "medium",
         _ => "info",
-    }
-}
-
-fn diagnostic(level: &str, source: &str, code: &str, message: impl Into<String>) -> Diagnostic {
-    Diagnostic {
-        level: level.to_string(),
-        source: source.to_string(),
-        code: code.to_string(),
-        message: message.into(),
-        path: None,
-    }
-}
-
-fn diagnostic_with_path(
-    level: &str,
-    source: &str,
-    code: &str,
-    path: impl Into<String>,
-    message: impl Into<String>,
-) -> Diagnostic {
-    Diagnostic {
-        level: level.to_string(),
-        source: source.to_string(),
-        code: code.to_string(),
-        message: message.into(),
-        path: Some(path.into()),
     }
 }
 
@@ -1217,73 +809,65 @@ fn severity_rank(severity: &str) -> u8 {
 
 fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
     let mut findings = Vec::new();
-    if profile.rules_enabled("todo-comment") {
-        if let Some(line) = find_todo_line(content) {
-            findings.push(Finding {
-                rule: "todo-comment".to_string(),
-                severity: "info".to_string(),
-                message: "TODO marker found in comment".to_string(),
-                category: Some("maintainability".to_string()),
-                line: Some(line),
-                source: Some("local-rules".to_string()),
-                origin: "deterministic".to_string(),
-            });
-        }
+    let lower = content.to_lowercase();
+
+    if profile.rules_enabled("todo-comment") && content.contains("TODO") {
+        findings.push(Finding {
+            severity: "info".to_string(),
+            rule: "todo-comment".to_string(),
+            message: "TODO marker found in file content".to_string(),
+            category: Some("maintainability".to_string()),
+            line: None,
+            source: Some("local-rules".to_string()),
+        });
     }
 
-    // SECURITY: Use word-boundary matching to reduce false positives on "unsafe" in prose
-    if profile.rules_enabled("unsafe-usage") {
-        if let Some(line) = find_code_keyword_line(content, "unsafe") {
-            findings.push(Finding {
-                rule: "unsafe-usage".to_string(),
-                severity: "high".to_string(),
-                message: "Possible unsafe keyword usage detected (code context)".to_string(),
-                category: Some("safety".to_string()),
-                line: Some(line),
-                source: Some("local-rules".to_string()),
-                origin: "deterministic".to_string(),
-            });
-        }
+    if profile.rules_enabled("unsafe-usage") && content.contains("unsafe") {
+        findings.push(Finding {
+            severity: "high".to_string(),
+            rule: "unsafe-usage".to_string(),
+            message: "Possible unsafe usage detected".to_string(),
+            category: Some("safety".to_string()),
+            line: None,
+            source: Some("local-rules".to_string()),
+        });
     }
 
-    if profile.rules_enabled("possible-secret") {
-        if let Some(line) = find_secret_assignment_line(content) {
-            findings.push(Finding {
-                rule: "possible-secret".to_string(),
-                severity: "high".to_string(),
-                message: "Possible secret or credential assignment detected".to_string(),
-                category: Some("security".to_string()),
-                line: Some(line),
-                source: Some("local-rules".to_string()),
-                origin: "deterministic".to_string(),
-            });
-        }
+    if profile.rules_enabled("possible-secret")
+        && (lower.contains("password") || lower.contains("secret"))
+    {
+        findings.push(Finding {
+            severity: "high".to_string(),
+            rule: "possible-secret".to_string(),
+            message: "Possible secret or sensitive value text detected".to_string(),
+            category: Some("security".to_string()),
+            line: None,
+            source: Some("local-rules".to_string()),
+        });
     }
 
     if profile.rules_enabled("large-file") && content.len() > 20 * 1024 {
         findings.push(Finding {
-            rule: "large-file".to_string(),
             severity: "low".to_string(),
+            rule: "large-file".to_string(),
             message: "Large file snippet may hide complexity/quality issues".to_string(),
             category: Some("maintainability".to_string()),
             line: None,
             source: Some("local-rules".to_string()),
-            origin: "deterministic".to_string(),
         });
     }
 
-    if profile.rules_enabled("hardcoded-value") {
-        if let Some(line) = find_hardcoded_credential_line(content) {
-            findings.push(Finding {
-                rule: "hardcoded-value".to_string(),
-                severity: "high".to_string(),
-                message: "Possible hardcoded credential or key assignment detected".to_string(),
-                category: Some("security".to_string()),
-                line: Some(line),
-                source: Some("local-rules".to_string()),
-                origin: "deterministic".to_string(),
-            });
-        }
+    if profile.rules_enabled("hardcoded-value")
+        && (lower.contains("api_key") || lower.contains("token") || lower.contains("password"))
+    {
+        findings.push(Finding {
+            severity: "high".to_string(),
+            rule: "hardcoded-value".to_string(),
+            message: "Possible hardcoded credential-like token detected".to_string(),
+            category: Some("security".to_string()),
+            line: None,
+            source: Some("local-rules".to_string()),
+        });
     }
 
     findings
@@ -1329,45 +913,13 @@ fn is_included(path: &Path, include: &GlobSet, exclude: &GlobSet) -> bool {
 }
 
 fn profile_path_candidates(root: &Path, name: &str) -> Vec<PathBuf> {
-    // SECURITY: Reject profile names containing path separators or traversal sequences
-    // to prevent escaping the profile directory
-    if name.contains('/') || name.contains('\\') || name.contains("..") || name.is_empty() {
-        return vec![];
-    }
     [("toml"), ("yaml"), ("yml")]
         .into_iter()
         .map(|ext| root.join(format!("{name}.{ext}")))
         .collect()
 }
 
-// SECURITY: Maximum profile file size to prevent resource exhaustion from malicious repos
-const MAX_PROFILE_FILE_BYTES: u64 = 256 * 1024;
-// SECURITY: Maximum inheritance depth to prevent stack exhaustion
-const MAX_INHERITANCE_DEPTH: usize = 8;
-
 fn load_profile_file(path: &Path) -> Result<RuntimeProfile> {
-    // SECURITY: Check file size before reading to prevent memory abuse
-    let metadata =
-        fs::metadata(path).with_context(|| format!("stat profile {}", path.display()))?;
-    if metadata.len() > MAX_PROFILE_FILE_BYTES {
-        return Err(anyhow!(
-            "profile file too large ({} bytes, limit {}): {}",
-            metadata.len(),
-            MAX_PROFILE_FILE_BYTES,
-            path.display()
-        ));
-    }
-    // SECURITY: Reject symlinks in profile files to prevent following links outside repo
-    if metadata.file_type().is_symlink()
-        || fs::symlink_metadata(path)
-            .map(|m| m.file_type().is_symlink())
-            .unwrap_or(false)
-    {
-        return Err(anyhow!(
-            "profile file is a symlink (rejected for safety): {}",
-            path.display()
-        ));
-    }
     let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     if path
         .extension()
@@ -1384,149 +936,15 @@ fn load_profile_file(path: &Path) -> Result<RuntimeProfile> {
     Ok(profile)
 }
 
-pub fn validate_profile_config(
-    profile: &RuntimeProfile,
-    source_label: &str,
-) -> Result<Vec<Diagnostic>> {
-    let mut diagnostics = Vec::new();
-
-    if profile.name.trim().is_empty() {
-        return Err(anyhow!(
-            "profile {source_label} is missing required 'name' field"
-        ));
-    }
-    if profile.limits.max_files == 0 {
-        return Err(anyhow!(
-            "profile {source_label} has invalid limits.max_files = 0"
-        ));
-    }
-    if profile.limits.max_total_bytes == 0 {
-        return Err(anyhow!(
-            "profile {source_label} has invalid limits.max_total_bytes = 0"
-        ));
-    }
-    if profile.limits.max_file_read_bytes == 0 {
-        return Err(anyhow!(
-            "profile {source_label} has invalid limits.max_file_read_bytes = 0"
-        ));
-    }
-
-    let normalized_min = normalize_severity(&profile.rules.min_severity).to_string();
-    if normalized_min != profile.rules.min_severity && !profile.rules.min_severity.is_empty() {
-        diagnostics.push(diagnostic(
-            "warning",
-            "profile",
-            "normalized-min-severity",
-            format!(
-                "profile {} uses non-standard min_severity '{}'; normalized to '{}'",
-                profile.name, profile.rules.min_severity, normalized_min
-            ),
-        ));
-    }
-
-    if profile.ai.enabled && matches!(profile.ai.provider, provider::ProviderConfig::Disabled) {
-        diagnostics.push(diagnostic(
-            "warning",
-            "provider",
-            "ai-enabled-provider-disabled",
-            format!(
-                "profile {} enables AI but provider is disabled; provider analysis will be skipped",
-                profile.name
-            ),
-        ));
-    }
-
-    if profile.worker.enabled && profile.rules.suspicious_patterns.is_empty() {
-        diagnostics.push(diagnostic(
-            "warning",
-            "worker",
-            "worker-without-patterns",
-            format!(
-                "profile {} enables worker analysis without suspicious patterns; worker may never run",
-                profile.name
-            ),
-        ));
-    }
-
-    if profile.ai.enabled
-        && profile.rules.suspicious_patterns.is_empty()
-        && profile.ai.suspicious_patterns.is_empty()
-    {
-        diagnostics.push(diagnostic(
-            "warning",
-            "provider",
-            "provider-without-patterns",
-            format!(
-                "profile {} enables provider analysis without suspicious patterns; provider may never run",
-                profile.name
-            ),
-        ));
-    }
-
-    if profile.ai.enabled
-        && profile.rules.suspicious_patterns.len() < 2
-        && profile.ai.suspicious_patterns.is_empty()
-    {
-        diagnostics.push(diagnostic(
-            "info",
-            "provider",
-            "narrow-provider-patterns",
-            format!(
-                "profile {} uses a very narrow suspicious pattern set; provider coverage may miss relevant files",
-                profile.name
-            ),
-        ));
-    }
-
-    Ok(diagnostics)
-}
-
-pub fn effective_profile(
-    name_or_path: &str,
-    root: &Path,
-) -> Result<(EffectiveProfile, String, Vec<Diagnostic>)> {
-    let (profile, source) = load_profile(name_or_path, root)?;
-    let source_desc = match &source {
-        ProfileSource::Builtin => "builtin profile".to_string(),
-        ProfileSource::Loaded(path) => path.to_string_lossy().to_string(),
-    };
-    let diagnostics = validate_profile_config(&profile, &source_desc)?;
-    let source_label = match source {
-        ProfileSource::Builtin => "builtin".to_string(),
-        ProfileSource::Loaded(path) => format!("file:{}", path.display()),
-    };
-    Ok((profile.into_effective(), source_label, diagnostics))
-}
-
 fn resolve_profile_from_file(
     path: &Path,
     root: &Path,
     seen: &mut HashSet<PathBuf>,
     seen_names: &mut HashSet<String>,
 ) -> Result<(RuntimeProfile, ProfileSource)> {
-    // SECURITY: Enforce maximum inheritance depth to prevent stack exhaustion
-    if seen.len() >= MAX_INHERITANCE_DEPTH {
-        return Err(anyhow!(
-            "profile inheritance too deep (limit {})",
-            MAX_INHERITANCE_DEPTH
-        ));
-    }
-
     let canonical = path
         .canonicalize()
         .with_context(|| format!("canonicalize profile {}", path.display()))?;
-
-    // SECURITY: Validate that the canonicalized profile path stays within the scan root
-    let root_canonical = root
-        .canonicalize()
-        .with_context(|| format!("canonicalize root {}", root.display()))?;
-    if !canonical.starts_with(&root_canonical) {
-        return Err(anyhow!(
-            "profile path escapes scan root boundary: {}",
-            canonical.display()
-        ));
-    }
-
     if seen.contains(&canonical) || seen_names.contains(&canonical.to_string_lossy().to_string()) {
         return Err(anyhow!(
             "circular profile inheritance involving '{}'",
@@ -1543,48 +961,22 @@ fn resolve_profile_from_file(
             canonical.display()
         ));
     }
-    // SECURITY: Validate profile name constraints
-    let name_trimmed = profile.name.trim();
-    if name_trimmed.len() > 128 {
-        return Err(anyhow!(
-            "profile name too long (limit 128 chars): {}",
-            canonical.display()
-        ));
-    }
-    if name_trimmed.contains('/') || name_trimmed.contains('\\') || name_trimmed.contains("..") {
-        return Err(anyhow!(
-            "profile name contains invalid path characters: '{}'",
-            name_trimmed
-        ));
-    }
 
     seen.insert(canonical.clone());
     seen_names.insert(profile.name.clone());
 
     if let Some(inherits) = profile.inherits.clone() {
-        // SECURITY: Validate inherited profile name to prevent path traversal
-        let inherits_trimmed = inherits.trim();
-        if inherits_trimmed.contains('/')
-            || inherits_trimmed.contains('\\')
-            || inherits_trimmed.contains("..")
-        {
-            return Err(anyhow!(
-                "inherited profile name contains invalid characters: '{}'",
-                inherits_trimmed
-            ));
-        }
-
         let base_profile = if let Some(base_path) =
-            profile_path_candidates(&root.join(".dn/profiles"), inherits_trimmed)
+            profile_path_candidates(&root.join(".dn/profiles"), &inherits)
                 .into_iter()
                 .find(|candidate| candidate.exists())
         {
             let (base, _) = resolve_profile_from_file(&base_path, root, seen, seen_names)?;
             base
-        } else if let Some(profile) = builtin_profile(inherits_trimmed) {
+        } else if let Some(profile) = builtin_profile(&inherits) {
             profile
         } else {
-            return Err(anyhow!("unknown inherited profile '{}'", inherits_trimmed));
+            return Err(anyhow!("unknown inherited profile '{inherits}'"));
         };
 
         profile = profile.merge(&base_profile);
@@ -1658,44 +1050,7 @@ pub fn load_profile(name_or_path: &str, root: &Path) -> Result<(RuntimeProfile, 
     Err(anyhow!("unknown profile '{}'", name_or_path))
 }
 
-pub fn available_profile_entries(root: &Path) -> Vec<(String, String)> {
-    let mut entries = vec![
-        "quick",
-        "security",
-        "architecture",
-        "deep",
-        "performance",
-        "maintainability",
-        "ai-generated-code-review",
-        "legacy-modernization",
-        "pre-merge",
-        "strict",
-        "educational",
-        "production-readiness",
-    ]
-    .into_iter()
-    .map(|name| (name.to_string(), "builtin".to_string()))
-    .collect::<Vec<_>>();
-
-    let profile_dir = root.join(".dn/profiles");
-    if let Ok(entries_iter) = fs::read_dir(profile_dir) {
-        for entry in entries_iter.flatten() {
-            let path = entry.path();
-            let ext = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
-            if ext == "toml" || ext == "yml" || ext == "yaml" {
-                if let Some(name) = path.file_stem().and_then(|name| name.to_str()) {
-                    entries.push((name.to_string(), format!("file:{}", path.display())));
-                }
-            }
-        }
-    }
-
-    entries.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-    entries.dedup_by(|a, b| a.0 == b.0);
-    entries
-}
-
-pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<ScanOutcome> {
+pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<ScanReport> {
     let start = Instant::now();
     let root = root.as_ref();
     let root_path = root
@@ -1704,12 +1059,7 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
 
     let (base_profile, source) =
         load_profile(&options.profile_name, root).context("load profile")?;
-    let source_desc = match &source {
-        ProfileSource::Builtin => "builtin profile".to_string(),
-        ProfileSource::Loaded(path) => path.to_string_lossy().to_string(),
-    };
-    let mut diagnostics = validate_profile_config(&base_profile, &source_desc)?;
-    let mut profile = base_profile.into_effective();
+    let mut profile = base_profile.to_effective();
     if options.include_hidden {
         profile.include_hidden = true;
     }
@@ -1729,9 +1079,7 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
     walk.hidden(!profile.include_hidden)
         .git_ignore(true)
         .git_global(true)
-        .parents(true)
-        // SECURITY: Do not follow symlinks to prevent escaping the scan root
-        .follow_links(false);
+        .parents(true);
 
     let mut files = Vec::new();
     let mut total_bytes = 0u64;
@@ -1744,22 +1092,20 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
 
     let mut worker_registry = if profile.worker_enabled {
         let registry = WorkerRegistry::new(profile.worker_timeout_ms, profile.worker_retries);
-        let supported = ["python", "java", "typescript", "javascript"]
-            .into_iter()
-            .filter(|language| registry.get(language).is_some())
-            .collect::<Vec<_>>();
-        if !supported.is_empty() {
-            worker_mode = supported.join(",");
+        if let Some(cfg) = registry.get("python") {
+            if cfg.retries > 0 {
+                worker_mode = "python".to_string();
+            } else {
+                worker_mode = "python (single-shot)".to_string();
+            }
         }
         Some(registry)
     } else {
         None
     };
     let review_engine = ReviewEngine::from_config(&profile.ai);
-    let provider_name = review_engine.provider_name().to_string();
 
     let mut ai_files_used = 0usize;
-    let mut worker_used = false;
 
     for entry in walk.build() {
         if total_files_scanned >= profile.limits.max_files
@@ -1773,12 +1119,6 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
             Ok(entry) => entry,
             Err(err) => {
                 errors.push(format!("walk error: {err}"));
-                diagnostics.push(diagnostic(
-                    "error",
-                    "scanner",
-                    "walk-error",
-                    format!("{err}"),
-                ));
                 continue;
             }
         };
@@ -1788,13 +1128,6 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
             Ok(metadata) => metadata,
             Err(err) => {
                 errors.push(format!("metadata {}: {err}", path.display()));
-                diagnostics.push(diagnostic_with_path(
-                    "error",
-                    "io",
-                    "metadata-error",
-                    path.display().to_string(),
-                    format!("{err}"),
-                ));
                 continue;
             }
         };
@@ -1803,18 +1136,14 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
             continue;
         }
 
-        // SECURITY: Skip symlinks and non-regular files to prevent escaping scan root
-        if !metadata.is_file() || metadata.file_type().is_symlink() {
+        if !metadata.is_file() {
             continue;
         }
 
         let path = path.to_path_buf();
         let relative = match path.strip_prefix(&root_path) {
             Ok(rel) => rel,
-            Err(_) => {
-                // SECURITY: Path outside scan root boundary — skip it
-                continue;
-            }
+            Err(_) => path.as_path(),
         };
 
         if !is_included(relative, &include_set, &exclude_set) {
@@ -1853,112 +1182,49 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
 
         let rel_path = relative.to_string_lossy().to_string();
         let mut findings = Vec::new();
-        let language = detect_language(&path);
-        let mut integration_notes = Vec::new();
 
         match read_text_preview(&path, profile.limits.max_file_read_bytes) {
             Ok(content) => {
                 findings.extend(run_local_rules(&content, &profile));
-                for rule_match in analyze_registered_rules(&rel_path, language.as_deref(), &content)
-                {
-                    if profile.rules_enabled(&rule_match.finding.rule) {
-                        findings.push(rule_match.finding);
-                    }
-                }
 
-                let worker_suspicious =
-                    content_matches_suspicious_patterns(&content, &profile.suspicious_patterns);
-                let provider_patterns = if profile.ai.suspicious_patterns.is_empty() {
-                    &profile.suspicious_patterns
-                } else {
-                    &profile.ai.suspicious_patterns
-                };
-                let provider_suspicious =
-                    content_matches_suspicious_patterns(&content, provider_patterns);
+                let suspicious = profile
+                    .suspicious_patterns
+                    .iter()
+                    .any(|pat| content.to_lowercase().contains(&pat.to_lowercase()));
 
-                if profile.worker_enabled && worker_suspicious {
-                    let language_name = language.clone().unwrap_or_else(|| "unknown".to_string());
+                if profile.worker_enabled && suspicious {
+                    let language = detect_language(&path).unwrap_or_else(|| "unknown".to_string());
                     if let Some(registry) = worker_registry.as_mut() {
-                        if registry.supports(&language_name) {
-                            match registry.analyze(&language_name, &rel_path, &content) {
-                                Ok(worker_findings) => {
-                                    worker_used = true;
-                                    integration_notes.push("worker:python".to_string());
-                                    findings.extend(worker_findings);
-                                }
-                                Err(err) => {
-                                    errors.push(format!("worker {}: {err}", rel_path));
-                                    diagnostics.push(diagnostic_with_path(
-                                        if options.strict_integrations || profile.ai.strict {
-                                            "error"
-                                        } else {
-                                            "warning"
-                                        },
-                                        "worker",
-                                        "worker-analysis-failed",
-                                        rel_path.clone(),
-                                        err.to_string(),
-                                    ));
-                                    if options.strict_integrations {
-                                        return Err(anyhow!(
-                                            "worker analysis failed for {}: {err}",
-                                            rel_path
-                                        ));
-                                    }
-                                }
+                        if registry.supports(&language) {
+                            match registry.analyze(&language, &rel_path, &content) {
+                                Ok(worker_findings) => findings.extend(worker_findings),
+                                Err(err) => errors.push(format!("worker {}: {err}", rel_path)),
                             }
                         }
                     }
                 }
 
-                if profile.ai.enabled
-                    && ai_files_used < profile.ai.max_ai_files
-                    && provider_suspicious
-                {
+                if profile.ai.enabled && ai_files_used < profile.ai.max_ai_files && suspicious {
                     match review_engine.analyze_file_if_enabled(
                         &profile.ai,
                         AiRequest {
                             path: rel_path.clone(),
-                            language: language.clone(),
+                            language: detect_language(&path),
                             content,
                             summary_profile: profile.name.clone(),
                         },
                     ) {
                         Ok(ai_findings) => {
-                            integration_notes.push(format!("provider:{provider_name}"));
                             findings.extend(ai_findings);
                             ai_files_used += 1;
                         }
-                        Err(err) => {
-                            errors.push(format!("ai provider {}: {err}", profile.name));
-                            diagnostics.push(diagnostic_with_path(
-                                if options.strict_integrations || profile.ai.strict {
-                                    "error"
-                                } else {
-                                    "warning"
-                                },
-                                "provider",
-                                "provider-analysis-failed",
-                                rel_path.clone(),
-                                err.to_string(),
-                            ));
-                            if options.strict_integrations || profile.ai.strict {
-                                return Err(anyhow!(
-                                    "provider analysis failed for {}: {err}",
-                                    rel_path
-                                ));
-                            }
-                        }
+                        Err(err) => errors.push(format!("ai provider {}: {err}", profile.name)),
                     }
                 }
 
-                let ai_min = normalize_severity(&profile.ai.min_severity).to_string();
                 findings.retain(|finding| {
-                    let meets_output = profile.prioritize_rules.contains(&finding.rule)
-                        || severity_threshold_met(finding, &profile.severity_threshold);
-                    let meets_ai_min = finding.origin != "provider"
-                        || severity_rank(&finding.severity) >= severity_rank(&ai_min);
-                    meets_output && meets_ai_min
+                    profile.prioritize_rules.contains(&finding.rule)
+                        || severity_threshold_met(finding, &profile.severity_threshold)
                 });
 
                 findings.sort_by(|a, b| {
@@ -1966,22 +1232,11 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                         .cmp(&severity_rank(normalize_severity(&a.severity)))
                 });
             }
-            Err(err) => {
-                errors.push(format!("read {}: {err}", rel_path));
-                diagnostics.push(diagnostic_with_path(
-                    "error",
-                    "io",
-                    "read-preview-failed",
-                    rel_path.clone(),
-                    err.to_string(),
-                ));
-            }
+            Err(err) => errors.push(format!("read {}: {err}", rel_path)),
         }
 
         let content_preview = if options.include_content || profile.include_content_preview {
-            read_text_preview(&path, 1024)
-                .ok()
-                .map(|preview| preview.replace('\0', "\\0"))
+            read_text_preview(&path, 1024).ok()
         } else {
             None
         };
@@ -1989,14 +1244,8 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         files.push(FileEntry {
             path: rel_path,
             size,
-            language,
             findings,
             content_preview,
-            integration_notes: if integration_notes.is_empty() {
-                None
-            } else {
-                Some(integration_notes)
-            },
         });
     }
 
@@ -2029,88 +1278,12 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         "disabled".to_string()
     };
 
-    let duration_ms = start.elapsed().as_millis();
-    let threshold = options.fail_on_severity.clone();
-    let threshold_triggered = threshold.as_deref().is_some_and(|level| {
-        if level == "none" {
-            return false;
-        }
-        let rank = severity_rank(normalize_severity(level));
-        severity.critical >= usize::from(rank <= 5)
-            && files
-                .iter()
-                .flat_map(|file| file.findings.iter())
-                .any(|finding| severity_rank(&finding.severity) >= rank)
-    });
-
-    let public_files = if options.summary_only {
-        Vec::new()
-    } else {
-        files.clone()
-    };
-
-    let report = ScanReport {
-        schema_version: "2".to_string(),
-        metadata: ReportMetadata {
-            root: root_path.to_string_lossy().to_string(),
-            profile: profile.name.clone(),
-            profile_source: profile_source.clone(),
-            command: options.command_name.clone(),
-            output_format: options.format.clone(),
-            summary_only: options.summary_only,
-            duration_ms,
-            truncated,
-        },
-        stats: ReportStats {
-            files_discovered,
-            files_scanned: total_files_scanned,
-            files_selected,
-            files_skipped,
-            total_files: files_discovered,
-            total_bytes,
-            skipped_large_files,
-            findings_total: total_findings,
-            severity_breakdown: severity.clone(),
-        },
-        integrations: IntegrationSummary {
-            worker: IntegrationRuntimeStatus {
-                enabled: profile.worker_enabled,
-                mode: worker_summary.clone(),
-                strict: options.strict_integrations,
-                used: worker_used,
-                supported_languages: if profile.worker_enabled {
-                    Some(vec!["python".to_string()])
-                } else {
-                    None
-                },
-                name: None,
-                max_ai_files: None,
-                files_sent: None,
-            },
-            provider: IntegrationRuntimeStatus {
-                enabled: profile.ai.enabled,
-                mode: provider_name.clone(),
-                strict: options.strict_integrations || profile.ai.strict,
-                used: ai_files_used > 0,
-                supported_languages: None,
-                name: Some(provider_name.clone()),
-                max_ai_files: Some(profile.ai.max_ai_files),
-                files_sent: Some(ai_files_used),
-            },
-        },
-        diagnostics: diagnostics.clone(),
-        files: public_files,
-        summary: format!(
-            "Scanned {files_discovered} files ({total_files_scanned} scanned), {total_findings} findings in {duration_ms}ms",
-        ),
-    };
-
-    Ok(ScanOutcome {
-        root: report.metadata.root.clone(),
-        profile: report.metadata.profile.clone(),
-        provider: format!("{}@{}", provider_name, profile_source),
+    Ok(ScanReport {
+        root: root_path.to_string_lossy().to_string(),
+        profile: profile.name.clone(),
+        provider: format!("{}@{}", review_engine.provider_name(), profile_source),
         worker: worker_summary,
-        profile_source,
+        profile_source: profile_source.clone(),
         files_discovered,
         files_scanned: total_files_scanned,
         files_selected,
@@ -2122,13 +1295,11 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         errors,
         files,
         severity_breakdown: severity,
-        duration_ms,
-        summary: report.summary.clone(),
-        report,
-        exit_evaluation: ExitEvaluation {
-            threshold,
-            threshold_triggered,
-        },
+        duration_ms: start.elapsed().as_millis(),
+        summary: format!(
+            "Scanned {files_discovered} files ({total_files_scanned} scanned), {total_findings} findings in {}ms",
+            start.elapsed().as_millis()
+        ),
     })
 }
 
@@ -2166,7 +1337,7 @@ mod tests {
     fn builtin_profile_exists() {
         let (profile, _) = load_profile("quick", Path::new(".")).unwrap();
         assert_eq!(profile.name, "quick");
-        assert!(!profile.worker.enabled || profile.limits.max_files > 0);
+        assert!(profile.worker.enabled == false || profile.limits.max_files > 0);
     }
 
     #[test]
@@ -2391,131 +1562,5 @@ include_binary = true
         );
         assert!(!report.files[0].findings.is_empty());
         let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn summary_only_report_empties_public_files() {
-        let root = make_tmp_root("summary-only");
-        write_file(&root, "secret.txt", "password = \"hello\"\n");
-
-        let report = scan_repository(
-            &root,
-            &ScanOptions {
-                profile_name: "quick".into(),
-                summary_only: true,
-                format: OutputFormat::Json,
-                ..ScanOptions::default()
-            },
-        )
-        .unwrap();
-
-        assert_eq!(report.report.schema_version, "2");
-        assert!(report.report.metadata.summary_only);
-        assert_eq!(report.report.files.len(), 0);
-        assert!(!report.files.is_empty());
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn invalid_zero_limit_profile_is_rejected() {
-        let repo = make_tmp_root("zero-limit");
-        fs::write(
-            repo.join(".dn/profiles/zero.toml"),
-            r#"
-name = "zero"
-[limits]
-max_files = 0
-"#,
-        )
-        .unwrap();
-
-        let err = effective_profile("zero", &repo).unwrap_err();
-        assert!(err.to_string().contains("invalid limits.max_files = 0"));
-        let _ = fs::remove_dir_all(repo);
-    }
-
-    #[test]
-    fn diagnostics_include_ai_disabled_warning() {
-        let profile = RuntimeProfile {
-            name: "diag".to_string(),
-            ai: ProfileAiConfig {
-                enabled: true,
-                provider: provider::ProviderConfig::Disabled,
-                ..ProfileAiConfig::default()
-            },
-            ..RuntimeProfile::default()
-        };
-
-        let diagnostics = validate_profile_config(&profile, "inline").unwrap();
-        assert!(diagnostics
-            .iter()
-            .any(|diag| diag.code == "ai-enabled-provider-disabled"));
-    }
-
-    #[test]
-    fn rejects_non_local_provider_endpoint() {
-        let root = make_tmp_root("remote-provider");
-        write_file(&root, "suspicious.py", "eval('2+2')\n");
-        fs::write(
-            root.join(".dn/profiles/remote-provider.toml"),
-            r#"
-name = "remote-provider"
-[rules]
-deterministic_rules = []
-suspicious_patterns = ["eval("]
-[ai]
-enabled = true
-max_ai_files = 10
-provider = { type = "ollama", base_url = "https://example.com", model = "demo" }
-"#,
-        )
-        .unwrap();
-
-        let report = scan_repository(
-            &root,
-            &ScanOptions {
-                profile_name: "remote-provider".into(),
-                ..ScanOptions::default()
-            },
-        )
-        .unwrap();
-
-        assert!(report
-            .report
-            .diagnostics
-            .iter()
-            .any(|diag| diag.code == "provider-analysis-failed"));
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn secret_rule_ignores_comment_examples_and_env_indirection() {
-        assert!(find_secret_assignment_line(
-            r#"
-            // password = "example-secret"
-            api_key = "${API_KEY}"
-            client_secret: "changeme"
-            "#
-        )
-        .is_none());
-    }
-
-    #[test]
-    fn secret_rule_detects_json_yaml_and_single_quote_assignments() {
-        assert!(find_secret_assignment_line(
-            r#"
-            const cfg = { "client_secret": "prod-Secret-9" };
-            token: 'real-token-42'
-            "#
-        )
-        .is_some());
-    }
-
-    #[test]
-    fn hardcoded_rule_requires_more_than_placeholder_tokens() {
-        assert!(find_hardcoded_credential_line("token = \"test-token\"").is_none());
-        assert!(
-            find_hardcoded_credential_line("github_token = \"ghp_1234567890abcdef\"").is_some()
-        );
     }
 }

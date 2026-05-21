@@ -18,5 +18,17 @@ jobs:
         run: cargo build --workspace
       - name: Test
         run: cargo test --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       - name: Fmt
         run: cargo fmt --all --check
+
+  c-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build C Worker
+        run: cd workers/c && make
+      - name: Test C Worker
+        run: cd workers/c && ./dn-worker-c test_sample.c | jq .

@@ -1,0 +1,48 @@
+# Kernel C Coding Style Profile
+# Based on Linux kernel checkpatch.pl rules
+
+[profile]
+name = "kernel-c"
+description = "Linux kernel C coding style checks"
+language = "c"
+version = "1.0.0"
+
+[workers]
+# Use the C worker with tree-sitter
+c = { enabled = true, path = "workers/c/dn-worker-c" }
+
+[rules]
+# Rule 1: Line length limit
+[rules.line-length]
+enabled = true
+severity = "warning"
+max_length = 80
+description = "Lines should not exceed 80 characters"
+
+# Rule 2: Space before tab
+[rules.space-before-tab]
+enabled = true
+severity = "error"
+description = "No spaces before tabs in indentation"
+
+# Rule 3: Trailing whitespace
+[rules.trailing-whitespace]
+enabled = true
+severity = "warning"
+description = "No trailing whitespace at end of lines"
+
+# Rule 4: Keyword spacing
+[rules.keyword-spacing]
+enabled = true
+severity = "warning"
+description = "Space required after keywords (if, for, while, switch)"
+
+# Rule 5: Brace style (K&R)
+[rules.brace-style]
+enabled = true
+severity = "warning"
+description = "Opening braces should be on same line as statement (K&R style)"
+
+[output]
+format = "json"
+show_context = true

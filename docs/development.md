@@ -7,41 +7,29 @@ cargo build --workspace
 cargo test --workspace
 ```
 
-## Recommended validation sequence
+If you are working on profile/runtime behavior, add tests under:
 
-```bash
-cargo fmt --all --check
-cargo check --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-```
+- `crates/dn-runtime/src/lib.rs` unit tests for profile loading and scan semantics.
+- `apps/dn-cli/tests/cli.rs` integration tests for CLI-facing behavior.
+
+Use trusted local fixtures when testing profile behavior; avoid loading unknown profiles from untrusted sources in CI.
 
 ## Useful command workflows
 
-```bash
-cargo run -p dn-cli -- scan . --profile quick
-cargo run -p dn-cli -- scan . --profile quick --json --summary-only
-cargo run -p dn-cli -- scan . --profile security --json --fail-on medium
-cargo run -p dn-cli -- review . --profile architecture --markdown --content
-cargo run -p dn-cli -- profiles list . --json
-cargo run -p dn-cli -- profiles show quick . --json
-cargo run -p dn-cli -- doctor . --json
-cargo run -p dn-cli -- rules --json
-cargo run -p dn-cli -- fix . --profile quick --dry-run --json
-```
+- Format: `cargo fmt --all`
+- Test: `cargo test --workspace`
+- Build: `cargo build --workspace`
+- CLI quick smoke checks:
+  - `cargo run -p dn-cli -- scan . --profile quick`
+  - `cargo run -p dn-cli -- scan . --profile security --json`
+- `cargo run -p dn-cli -- review . --profile architecture --markdown`
+- `cargo run -p dn-cli -- scan . --profile security --json --content`
+- `cargo run -p dn-cli -- scan . --profile my-security --hidden`
+- `docker build -t dn-kernel -f docker/Dockerfile .`
+- `docker run --rm -v "$PWD":/workspace -w /workspace dn-kernel scan /workspace --profile quick --json`
 
-## Testing guidance
-
-If you change runtime/profile behavior, add or update tests in:
-
-- `crates/dn-runtime/src/lib.rs`
-- `apps/dn-cli/tests/cli.rs`
-
-If you change JSON shape, markdown rendering, or exit codes:
-
-- update docs in the same patch
-- update `CHANGELOG.md`
-- review `docs/compatibility.md`
+If Docker commands fail here due external registry TLS/network timeouts, record it as an environment issue and proceed with
+CLI/runtime validation from source first; this is an infrastructural limitation, not a confirmed regression.
 
 ## Python worker development
 
@@ -53,34 +41,34 @@ python -m pip install -r requirements.txt
 python dn_worker/__main__.py
 ```
 
-## Release-oriented checks
+## C worker development
 
 ```bash
-cargo fmt --all --check
-cargo check --workspace
-cargo test --workspace
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo run -p dn-cli -- scan . --profile quick --json --summary-only
-cargo run -p dn-cli -- review . --profile architecture --markdown
+cd workers/c
+make
+./dn-worker-c test_sample.c
 ```
 
+To clean and rebuild:
+```bash
+make clean && make
+```
+## Optional helpers
 
-## Rule registry development
+- `make setup` creates a virtualenv and installs worker dependencies.
+- `make scan` and `make scan-json` run sample scans over the repository.
+- `scripts/healthcheck.sh` can be used for basic runtime smoke checks.
 
-When adding new built-in rules:
+## Release checks (recommended before tagging)
 
-- add the rule to `crates/dn-runtime/src/rules.rs` with a `RuleSpec` entry
-- keep the rule language-aware when possible
-- prefer findings with explicit line numbers
-- add regression tests for both positive detection and obvious false-positive suppression
-- avoid adding autofix support unless the change is safely local and behavior-preserving
-
-
-## Java and TypeScript worker development
-
-Java and TypeScript workers are stdio JSON workers like the Python path. When changing them:
-
-- keep responses compatible with `dn-ipc::WorkerResponse`
-- preserve `protocol_version`, `request_id`, and `status` fields
-- prefer line-aware findings
-- add CLI integration tests when expanding worker detection depth
+- `cargo fmt --all`
+- `cargo check --workspace`
+- `cargo test --workspace`
+- `cargo run -p dn-cli -- scan . --profile quick --json`
+- `cargo run -p dn-cli -- scan . --profile security --markdown`
+- `cargo run -p dn-cli -- review . --profile architecture --json`
+- `rg -n "unknown profile|Docker readiness|TLS" README.md docs/*.md` (quick docs-path consistency check).
+- `CHANGELOG.md` updated for user-visible changes
+- docs and command examples reviewed for behavior alignment
+- version intentionally bumped for release
+- Docker release-readiness should remain blocked if build/run cannot be reproducibly validated in your environment.
