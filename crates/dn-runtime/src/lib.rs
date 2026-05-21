@@ -1752,7 +1752,7 @@ mod tests {
     fn builtin_profile_exists() {
         let (profile, _) = load_profile("quick", Path::new(".")).unwrap();
         assert_eq!(profile.name, "quick");
-        assert!(profile.worker.enabled == false || profile.limits.max_files > 0);
+        assert!(!profile.worker.enabled || profile.limits.max_files > 0);
     }
 
     #[test]
