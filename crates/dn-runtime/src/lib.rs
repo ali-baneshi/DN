@@ -1065,10 +1065,7 @@ fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
     let lower = content.to_lowercase();
     let is_kernel_profile = profile.name == "kernel-c";
 
-    if profile.rules_enabled("todo-comment")
-        && content.contains("TODO")
-        && !is_kernel_profile
-    {
+    if profile.rules_enabled("todo-comment") && content.contains("TODO") && !is_kernel_profile {
         findings.push(Finding {
             severity: "info".to_string(),
             rule: "todo-comment".to_string(),
