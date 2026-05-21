@@ -107,8 +107,12 @@ struct CacheEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct ScanCache {
+    #[serde(default)]
+    version: u32,
     files: std::collections::HashMap<String, CacheEntry>,
 }
+
+const SCAN_CACHE_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
@@ -632,17 +636,26 @@ fn cache_path(root: &Path) -> PathBuf {
 }
 
 fn load_cache(root: &Path) -> ScanCache {
-    fs::read_to_string(cache_path(root))
+    let mut cache: ScanCache = fs::read_to_string(cache_path(root))
         .ok()
         .and_then(|raw| serde_json::from_str(&raw).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    if cache.version != SCAN_CACHE_VERSION {
+        cache = ScanCache {
+            version: SCAN_CACHE_VERSION,
+            ..Default::default()
+        };
+    }
+    cache
 }
 
 fn save_cache(root: &Path, cache: &ScanCache) {
     if let Some(parent) = cache_path(root).parent() {
         let _ = fs::create_dir_all(parent);
     }
-    if let Ok(raw) = serde_json::to_string(cache) {
+    let mut cache = cache.clone();
+    cache.version = SCAN_CACHE_VERSION;
+    if let Ok(raw) = serde_json::to_string(&cache) {
         let _ = fs::write(cache_path(root), raw);
     }
 }
@@ -795,23 +808,28 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
                 include_binary: false,
             },
             rules: AnalyzerConfig {
-                deterministic_rules: vec![
-                    "todo-comment".to_string(),
-                    "unsafe-usage".to_string(),
-                    "possible-secret".to_string(),
-                    "kernel-style".to_string(),
-                ],
+                deterministic_rules: vec!["unsafe-usage".to_string(), "kernel-style".to_string()],
                 suspicious_patterns: vec![
                     "BUG_ON".to_string(),
                     "goto out".to_string(),
                     "printk(".to_string(),
+                    "spin_lock(".to_string(),
+                    "mutex_lock(".to_string(),
+                    "rcu_read_lock(".to_string(),
+                    "__init".to_string(),
+                    "__exit".to_string(),
                 ],
                 prioritize: vec![
-                    "kernel-style".to_string(),
-                    "possible-secret".to_string(),
-                    "unsafe-usage".to_string(),
+                    "goto-out-without-cleanup".to_string(),
+                    "return-without-unlock".to_string(),
+                    "null-deref-before-check".to_string(),
+                    "missing-__init-__exit".to_string(),
+                    "RCU-missing-annotation".to_string(),
+                    "sleeping-in-atomic".to_string(),
+                    "BUG_ON-usage".to_string(),
+                    "printk-without-level".to_string(),
                 ],
-                min_severity: "info".to_string(),
+                min_severity: "medium".to_string(),
             },
             ..base
         }),
@@ -1045,8 +1063,12 @@ fn severity_rank(severity: &str) -> u8 {
 fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
     let mut findings = Vec::new();
     let lower = content.to_lowercase();
+    let is_kernel_profile = profile.name == "kernel-c";
 
-    if profile.rules_enabled("todo-comment") && content.contains("TODO") {
+    if profile.rules_enabled("todo-comment")
+        && content.contains("TODO")
+        && !is_kernel_profile
+    {
         findings.push(Finding {
             severity: "info".to_string(),
             rule: "todo-comment".to_string(),
@@ -1070,6 +1092,7 @@ fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
 
     if profile.rules_enabled("possible-secret")
         && (lower.contains("password") || lower.contains("secret"))
+        && !is_kernel_profile
     {
         findings.push(Finding {
             severity: "high".to_string(),
@@ -1119,7 +1142,10 @@ fn run_local_rules_fast_aware(
 
     let mut findings = Vec::new();
 
-    if profile.rules_enabled("todo-comment") && content.contains("TODO") {
+    if profile.rules_enabled("todo-comment")
+        && content.contains("TODO")
+        && profile.name != "kernel-c"
+    {
         findings.push(Finding {
             severity: "info".to_string(),
             rule: "todo-comment".to_string(),
@@ -1148,6 +1174,20 @@ fn severity_threshold_met(finding: &Finding, threshold: &str) -> bool {
     let t = severity_rank(normalize_severity(threshold));
     let s = severity_rank(normalize_severity(&finding.severity));
     s >= t
+}
+
+fn kernel_rule_allowed(finding: &Finding) -> bool {
+    matches!(
+        finding.rule.as_str(),
+        "goto-out-without-cleanup"
+            | "return-without-unlock"
+            | "null-deref-before-check"
+            | "missing-__init-__exit"
+            | "RCU-missing-annotation"
+            | "sleeping-in-atomic"
+            | "BUG_ON-usage"
+            | "printk-without-level"
+    )
 }
 
 impl EffectiveProfile {
@@ -1181,6 +1221,27 @@ fn build_selectors(profile: &EffectiveProfile) -> Result<(GlobSet, GlobSet)> {
 fn is_included(path: &Path, include: &GlobSet, exclude: &GlobSet) -> bool {
     let rel = path.to_string_lossy();
     include.is_match(rel.as_ref()) && !exclude.is_match(rel.as_ref())
+}
+
+fn adapt_kernel_profile_for_subtree(profile: &mut EffectiveProfile, root: &Path) {
+    if profile.name != "kernel-c" {
+        return;
+    }
+
+    let Some(name) = root.file_name().and_then(|name| name.to_str()) else {
+        return;
+    };
+
+    let subtree_roots = ["drivers", "fs", "include", "ipc", "kernel", "mm", "net"];
+    if subtree_roots.contains(&name) {
+        profile.include_globs = vec!["**/*.c".to_string(), "**/*.h".to_string()];
+        profile.exclude_globs = vec![
+            ".git/**".to_string(),
+            "Documentation/**".to_string(),
+            "samples/**".to_string(),
+            "tools/**".to_string(),
+        ];
+    }
 }
 
 fn profile_path_candidates(root: &Path, name: &str) -> Vec<PathBuf> {
@@ -1331,6 +1392,7 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
     let (base_profile, source) =
         load_profile(&options.profile_name, root).context("load profile")?;
     let mut profile = base_profile.to_effective();
+    adapt_kernel_profile_for_subtree(&mut profile, &root_path);
     if options.include_hidden {
         profile.include_hidden = true;
     }
@@ -1369,7 +1431,13 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
 
     let mut worker_registry = if profile.worker_enabled && !options.fast {
         let registry = WorkerRegistry::new(profile.worker_timeout_ms, profile.worker_retries);
-        if let Some(cfg) = registry.get("python") {
+        if let Some(cfg) = registry.get("c") {
+            if cfg.retries > 0 {
+                worker_mode = "c".to_string();
+            } else {
+                worker_mode = "c (single-shot)".to_string();
+            }
+        } else if let Some(cfg) = registry.get("python") {
             if cfg.retries > 0 {
                 worker_mode = "python".to_string();
             } else {
@@ -1499,6 +1567,9 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                 let language = detect_language(&path).unwrap_or_else(|| "unknown".to_string());
                 let file_index = files.len();
                 findings.retain(|finding| {
+                    if profile.name == "kernel-c" {
+                        return kernel_rule_allowed(finding);
+                    }
                     profile.prioritize_rules.contains(&finding.rule)
                         || severity_threshold_met(finding, &profile.severity_threshold)
                 });
@@ -1582,6 +1653,9 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                         let path = files[index].path.clone();
                         if let Some(worker_findings) = results.get(&path) {
                             files[index].findings.extend(worker_findings.clone());
+                            if profile.name == "kernel-c" {
+                                files[index].findings.retain(kernel_rule_allowed);
+                            }
                             files[index].findings.sort_by(|a, b| {
                                 severity_rank(normalize_severity(&b.severity))
                                     .cmp(&severity_rank(normalize_severity(&a.severity)))
@@ -1603,6 +1677,9 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                     Ok(worker_findings) => {
                         if let Some(file) = files.iter_mut().find(|file| file.path == path) {
                             file.findings.extend(worker_findings);
+                            if profile.name == "kernel-c" {
+                                file.findings.retain(kernel_rule_allowed);
+                            }
                             file.findings.sort_by(|a, b| {
                                 severity_rank(normalize_severity(&b.severity))
                                     .cmp(&severity_rank(normalize_severity(&a.severity)))
@@ -1974,6 +2051,7 @@ include_binary = true
                 || report.worker == "python (single-shot)"
                 || report.worker == "c"
                 || report.worker == "c-batch"
+                || report.worker == "c (single-shot)"
         );
         assert!(
             report.errors.is_empty(),
