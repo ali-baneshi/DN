@@ -301,18 +301,18 @@ impl WorkerSession {
          Ok(())
      }
 
-   fn map_findings(source: &str, findings: Vec<WorkerFinding>) -> Vec<Finding> {
-       findings
-           .into_iter()
-           .take(MAX_WORKER_FINDINGS)
-           .map(|finding: WorkerFinding| Finding {
-               rule: truncate_field(&finding.rule, 256),
-               severity: validate_worker_severity(&finding.severity),
-               message: truncate_field(&finding.message, MAX_WORKER_FIELD_LEN),
-               category: finding.category.map(|c| truncate_field(&c, 256)),
-               line: finding.line,
-               source: Some(source.to_string()),
-           })
-           .collect()
-     }
- }
+    fn map_findings(source: &str, findings: Vec<WorkerFinding>) -> Vec<Finding> {
+        findings
+            .into_iter()
+            .take(MAX_WORKER_FINDINGS)
+            .map(|finding: WorkerFinding| Finding {
+                rule: truncate_field(&finding.rule, 256),
+                severity: validate_worker_severity(&finding.severity),
+                message: truncate_field(&finding.message, MAX_WORKER_FIELD_LEN),
+                category: finding.category.map(|c| truncate_field(&c, 256)),
+                line: finding.line,
+                source: Some(source.to_string()),
+            })
+            .collect()
+      }
+   }
