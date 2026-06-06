@@ -34,6 +34,8 @@ static char *dup_string(const char *input) {
     return copy;
 }
 
+#define MAX_STDIN_SIZE (64 * 1024 * 1024) // 64 MiB
+
 static char *read_all_stdin(void) {
     size_t capacity = 8192;
     size_t length = 0;
@@ -45,13 +47,25 @@ static char *read_all_stdin(void) {
     int ch;
     while ((ch = getchar()) != EOF) {
         if (length + 1 >= capacity) {
-            capacity *= 2;
-            char *next = realloc(buffer, capacity);
+            // Check if we're already at or exceeding max size
+            if (capacity >= MAX_STDIN_SIZE) {
+                free(buffer);
+                return NULL;
+            }
+            
+            // Double capacity but don't exceed max size
+            size_t new_capacity = capacity * 2;
+            if (new_capacity > MAX_STDIN_SIZE) {
+                new_capacity = MAX_STDIN_SIZE;
+            }
+            
+            char *next = realloc(buffer, new_capacity);
             if (!next) {
                 free(buffer);
                 return NULL;
             }
             buffer = next;
+            capacity = new_capacity;
         }
         buffer[length++] = (char)ch;
     }
@@ -106,11 +120,16 @@ static char *extract_string_field(const char *json, const char *key) {
     const char *end = start;
     while (*end && *end != '"') {
         if (*end == '\\' && end[1]) {
+            end += 2;
+        } else {
             end++;
         }
-        end++;
     }
     size_t len = (size_t)(end - start);
+    // Limit string length to prevent excessive memory allocation
+    if (len > 1024 * 1024) { // 1 MiB limit for individual string fields
+        return NULL;
+    }
     char *out = malloc(len + 1);
     if (!out) {
         return NULL;
@@ -121,24 +140,24 @@ static char *extract_string_field(const char *json, const char *key) {
         if (ch == '\\' && read_idx + 1 < len) {
             read_idx++;
             switch (start[read_idx]) {
-            case 'n':
-                out[write_idx++] = '\n';
-                break;
-            case 'r':
-                out[write_idx++] = '\r';
-                break;
-            case 't':
-                out[write_idx++] = '\t';
-                break;
-            case '\\':
-                out[write_idx++] = '\\';
-                break;
-            case '"':
-                out[write_idx++] = '"';
-                break;
-            default:
-                out[write_idx++] = start[read_idx];
-                break;
+                case 'n':
+                    out[write_idx++] = '\n';
+                    break;
+                case 'r':
+                    out[write_idx++] = '\r';
+                    break;
+                case 't':
+                    out[write_idx++] = '\t';
+                    break;
+                case '\\':
+                    out[write_idx++] = '\\';
+                    break;
+                case '"':
+                    out[write_idx++] = '"';
+                    break;
+                default:
+                    out[write_idx++] = start[read_idx];
+                    break;
             }
         } else {
             out[write_idx++] = ch;
@@ -166,6 +185,10 @@ static char *extract_params_object(const char *json) {
             depth--;
             if (depth == 0) {
                 size_t len = (size_t)(end - start + 1);
+                // Limit object size to prevent excessive memory allocation
+                if (len > 1024 * 1024) { // 1 MiB limit for params object
+                    return NULL;
+                }
                 char *copy = malloc(len + 1);
                 if (!copy) {
                     return NULL;
@@ -208,6 +231,10 @@ static int extract_scan_files(const char *json, FileRequest *files, size_t *coun
                 depth--;
                 if (depth == 0) {
                     size_t len = (size_t)(cursor - obj_start + 1);
+                    // Limit object size to prevent excessive memory allocation
+                    if (len > 1024 * 1024) { // 1 MiB limit for file objects
+                        return -1;
+                    }
                     char *obj = malloc(len + 1);
                     if (!obj) {
                         return -1;

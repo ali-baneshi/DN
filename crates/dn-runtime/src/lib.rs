@@ -109,6 +109,8 @@ struct CacheEntry {
 struct ScanCache {
     #[serde(default)]
     version: u32,
+    #[serde(default)]
+    trusted: bool,
     files: std::collections::HashMap<String, CacheEntry>,
 }
 
@@ -646,6 +648,13 @@ fn load_cache(root: &Path) -> ScanCache {
             ..Default::default()
         };
     }
+    // Only use cache if it's marked as trusted (written by us)
+    if !cache.trusted {
+        cache = ScanCache {
+            version: SCAN_CACHE_VERSION,
+            ..Default::default()
+        };
+    }
     cache
 }
 
@@ -655,8 +664,15 @@ fn save_cache(root: &Path, cache: &ScanCache) {
     }
     let mut cache = cache.clone();
     cache.version = SCAN_CACHE_VERSION;
+    cache.trusted = true; // Mark cache as trusted when we write it
     if let Ok(raw) = serde_json::to_string(&cache) {
-        let _ = fs::write(cache_path(root), raw);
+        // Write to temporary file first, then atomically rename
+        let temp_path = cache_path(root).with_extension("tmp");
+        if let Ok(_) = fs::write(&temp_path, raw) {
+            // Try to sync to disk for durability
+            let _ = fs::File::open(&temp_path).and_then(|file| file.sync_all());
+            let _ = fs::rename(&temp_path, cache_path(root));
+        }
     }
 }
 
@@ -1248,6 +1264,28 @@ fn profile_path_candidates(root: &Path, name: &str) -> Vec<PathBuf> {
         .collect()
 }
 
+fn is_profile_name_safe(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let trimmed = name.trim();
+    if trimmed.starts_with('/') || trimmed.starts_with('\\') {
+        return false;
+    }
+    if trimmed.contains("..") {
+        return false;
+    }
+    if trimmed.contains('/') || trimmed.contains('\\') {
+        return false;
+    }
+    true
+}
+
+fn is_profile_path_safe(path: &Path) -> bool {
+    use std::path::Component;
+    !path.components().any(|c| matches!(c, Component::ParentDir))
+}
+
 fn load_profile_file(path: &Path) -> Result<RuntimeProfile> {
     let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     if path
@@ -1265,11 +1303,14 @@ fn load_profile_file(path: &Path) -> Result<RuntimeProfile> {
     Ok(profile)
 }
 
+const MAX_PROFILE_INHERITANCE_DEPTH: usize = 8;
+
 fn resolve_profile_from_file(
     path: &Path,
     root: &Path,
     seen: &mut HashSet<PathBuf>,
     seen_names: &mut HashSet<String>,
+    visited: usize,
 ) -> Result<(RuntimeProfile, ProfileSource)> {
     let canonical = path
         .canonicalize()
@@ -1277,6 +1318,13 @@ fn resolve_profile_from_file(
     if seen.contains(&canonical) || seen_names.contains(&canonical.to_string_lossy().to_string()) {
         return Err(anyhow!(
             "circular profile inheritance involving '{}'",
+            path.display()
+        ));
+    }
+    if visited >= MAX_PROFILE_INHERITANCE_DEPTH {
+        return Err(anyhow!(
+            "profile inheritance depth exceeded (max {}): '{}'",
+            MAX_PROFILE_INHERITANCE_DEPTH,
             path.display()
         ));
     }
@@ -1294,13 +1342,22 @@ fn resolve_profile_from_file(
     seen.insert(canonical.clone());
     seen_names.insert(profile.name.clone());
 
+    if let Some(ref inherits) = profile.inherits {
+        if !is_profile_name_safe(inherits) {
+            return Err(anyhow!(
+                "profile inheritance '{}' contains unsafe path characters",
+                inherits
+            ));
+        }
+    }
+
     if let Some(inherits) = profile.inherits.clone() {
         let base_profile = if let Some(base_path) =
             profile_path_candidates(&root.join(".dn/profiles"), &inherits)
                 .into_iter()
                 .find(|candidate| candidate.exists())
         {
-            let (base, _) = resolve_profile_from_file(&base_path, root, seen, seen_names)?;
+            let (base, _) = resolve_profile_from_file(&base_path, root, seen, seen_names, visited + 1)?;
             base
         } else if let Some(profile) = builtin_profile(&inherits) {
             profile
@@ -1351,15 +1408,31 @@ pub fn available_profiles(root: &Path) -> Vec<String> {
 }
 
 pub fn load_profile(name_or_path: &str, root: &Path) -> Result<(RuntimeProfile, ProfileSource)> {
+    // Validate path safety first to avoid leaking existence information
     if Path::new(name_or_path).exists() {
+        let path = Path::new(name_or_path);
+        if !is_profile_path_safe(path) {
+            return Err(anyhow!(
+                "profile path '{}' is not allowed; use a plain profile name or a file under the scan root",
+                name_or_path
+            ));
+        }
         let mut seen = HashSet::new();
         let mut seen_names = HashSet::new();
         return resolve_profile_from_file(
-            Path::new(name_or_path),
+            path,
             root,
             &mut seen,
             &mut seen_names,
+            0,
         );
+    }
+
+    if !is_profile_name_safe(name_or_path) {
+        return Err(anyhow!(
+            "profile name '{}' contains unsafe path characters",
+            name_or_path
+        ));
     }
 
     let profile_dir = root.join(".dn/profiles");
@@ -1369,7 +1442,7 @@ pub fn load_profile(name_or_path: &str, root: &Path) -> Result<(RuntimeProfile, 
     {
         let mut seen = HashSet::new();
         let mut seen_names = HashSet::new();
-        return resolve_profile_from_file(&file, root, &mut seen, &mut seen_names);
+        return resolve_profile_from_file(&file, root, &mut seen, &mut seen_names, 0);
     }
 
     if let Some(profile) = builtin_profile(name_or_path) {

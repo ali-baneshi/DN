@@ -1,5 +1,7 @@
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -101,7 +103,7 @@ pub struct WorkerSession {
 }
 
 impl WorkerSession {
-    pub fn new(command: &str, args: &[String]) -> Result<Self> {
+    pub fn new(command: &str, args: &[String], timeout_ms: u64) -> Result<Self> {
         let mut child = Command::new(command)
             .args(args)
             .stdin(Stdio::piped())
@@ -110,8 +112,6 @@ impl WorkerSession {
             // SECURITY: Prevent the worker from inheriting unnecessary environment variables
             .env_clear()
             .env("PATH", std::env::var("PATH").unwrap_or_default())
-            .env("HOME", std::env::var("HOME").unwrap_or_default())
-            .env("LANG", "C.UTF-8")
             .spawn()?;
 
         let stdin = child
@@ -124,6 +124,13 @@ impl WorkerSession {
             .take()
             .ok_or_else(|| anyhow!("worker stdout unavailable"))?;
 
+        // Spawn a timeout thread to kill the process if it runs too long
+        let timeout_child = child.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_millis(timeout_ms));
+            let _ = timeout_child.kill();
+        });
+
         Ok(Self {
             _child: child,
             stdin: BufWriter::new(stdin),
@@ -132,6 +139,7 @@ impl WorkerSession {
             request_seq: 0,
         })
     }
+}
 
     pub fn analyze(
         &mut self,
@@ -290,21 +298,21 @@ impl WorkerSession {
             ));
         }
 
-        Ok(())
-    }
-}
+         Ok(())
+     }
 
-fn map_findings(source: &str, findings: Vec<WorkerFinding>) -> Vec<Finding> {
-    findings
-        .into_iter()
-        .take(MAX_WORKER_FINDINGS)
-        .map(|finding: WorkerFinding| Finding {
-            rule: truncate_field(&finding.rule, 256),
-            severity: validate_worker_severity(&finding.severity),
-            message: truncate_field(&finding.message, MAX_WORKER_FIELD_LEN),
-            category: finding.category.map(|c| truncate_field(&c, 256)),
-            line: finding.line,
-            source: Some(source.to_string()),
-        })
-        .collect()
-}
+   fn map_findings(source: &str, findings: Vec<WorkerFinding>) -> Vec<Finding> {
+       findings
+           .into_iter()
+           .take(MAX_WORKER_FINDINGS)
+           .map(|finding: WorkerFinding| Finding {
+               rule: truncate_field(&finding.rule, 256),
+               severity: validate_worker_severity(&finding.severity),
+               message: truncate_field(&finding.message, MAX_WORKER_FIELD_LEN),
+               category: finding.category.map(|c| truncate_field(&c, 256)),
+               line: finding.line,
+               source: Some(source.to_string()),
+           })
+           .collect()
+     }
+ }

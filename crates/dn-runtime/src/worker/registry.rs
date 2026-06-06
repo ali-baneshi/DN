@@ -122,7 +122,7 @@ impl WorkerRegistry {
                         "worker script path is missing or unsafe for language: {language}"
                     ));
                 }
-                let session = WorkerSession::new(&config.command, &config.args)?;
+                 let session = WorkerSession::new(&config.command, &config.args, config.timeout_ms)?;
                 self.sessions.insert(language.to_string(), session);
             }
 
@@ -137,7 +137,7 @@ impl WorkerRegistry {
                             .get(language)
                             .map(|cfg| cfg.retries)
                             .unwrap_or(0);
-                        if attempts > retries + 1 {
+                         if attempts > retries {
                             return Err(err);
                         }
                     }
@@ -161,7 +161,7 @@ impl WorkerRegistry {
                     "worker script path is missing or unsafe for language: {language}"
                 ));
             }
-            let session = WorkerSession::new(&config.command, &config.args)?;
+             let session = WorkerSession::new(&config.command, &config.args, config.timeout_ms)?;
             self.sessions.insert(language.to_string(), session);
         }
 

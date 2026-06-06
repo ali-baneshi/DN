@@ -3,6 +3,43 @@ use serde::{Deserialize, Serialize};
 
 use crate::Finding;
 
+const ALLOWED_OLLAMA_HOSTS: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
+
+fn validate_ollama_base_url(url: &str) -> Result<String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("ollama base_url must not be empty"));
+    }
+    let without_protocol = trimmed
+        .strip_prefix("http://")
+        .or_else(|| trimmed.strip_prefix("https://"))
+        .ok_or_else(|| anyhow!("ollama base_url must start with http:// or https://"))?;
+    
+    // Handle IPv6 addresses in brackets: [::1]:11434 or [::1]
+    let host = if without_protocol.starts_with('[') {
+        if let Some(end_bracket) = without_protocol.find(']') {
+            &without_protocol[1..end_bracket]
+        } else {
+            return Err(anyhow!("ollama base_url has malformed IPv6 address"));
+        }
+    } else {
+        // Handle regular host:port or just host
+        let host_with_port = without_protocol
+            .split('/')
+            .next()
+            .unwrap_or("");
+        host_with_port.split(':').next().unwrap_or("")
+    };
+    
+    if !ALLOWED_OLLAMA_HOSTS.contains(&host) {
+        return Err(anyhow!(
+            "ollama base_url '{}' is not a local endpoint; allowed endpoints are http://localhost, http://127.0.0.1, and http://[::1] with any port",
+            trimmed
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -118,9 +155,10 @@ impl Provider {
 }
 
 fn analyze_with_ollama(provider: &OllamaProvider, request: &AiRequest) -> Result<Vec<Finding>> {
+    let base_url = validate_ollama_base_url(&provider.base_url)?;
     let url = format!(
         "{}/api/chat/completions",
-        provider.base_url.trim_end_matches('/')
+        base_url.trim_end_matches('/')
     );
     let system_prompt = format!(
         "You are a strict code reviewer for local repository review. Return JSON only.\n\nProfile: {}\n{}",
