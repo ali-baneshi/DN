@@ -18,4 +18,7 @@ build
 Cargo.lock
 !.env.example
 report.json
+<<<<<<< HEAD
 .kilo/
+=======
+>>>>>>> feature/persistent-workers

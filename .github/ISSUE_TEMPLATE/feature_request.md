@@ -7,6 +7,7 @@ assignees: ''
 
 ## Problem to solve
 
+<<<<<<< HEAD
 Describe the workflow pain point and whether it targets local review, CI gating, or both.
 
 ## Proposed change
@@ -22,3 +23,16 @@ Describe the workflow pain point and whether it targets local review, CI gating,
 - [ ] Docs updated in `README.md` / `docs/`
 - [ ] Tests added or updated
 - [ ] Compatibility impact is documented when output/CLI changes
+=======
+What workflow is hard today?
+
+## Proposed change
+
+Describe the expected behavior and why it helps users.
+
+## Acceptance criteria
+
+- [ ] clear command/usage changes
+- [ ] docs update
+- [ ] tests updated or added
+>>>>>>> feature/persistent-workers

@@ -9,7 +9,10 @@ typedef struct {
     char message[256];
     int line;
     int column;
+<<<<<<< HEAD
     char category[64];
+=======
+>>>>>>> feature/persistent-workers
 } Issue;
 
 typedef struct {

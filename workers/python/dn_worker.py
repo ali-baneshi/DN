@@ -55,7 +55,11 @@ def handle_request(req):
         content = params.get("content", "")
         findings = analyze(path, content)
         return {
+<<<<<<< HEAD
             "protocol_version": req.get("protocol_version", "1.0.0"),
+=======
+            "protocol_version": req.get("protocol_version", "0.1.0"),
+>>>>>>> feature/persistent-workers
             "request_id": req.get("request_id", ""),
             "status": "ok",
             "findings": findings,
@@ -67,7 +71,11 @@ def handle_request(req):
         content = req.get("content", "")
         findings = analyze(path, content)
         return {
+<<<<<<< HEAD
             "protocol_version": "1.0.0",
+=======
+            "protocol_version": "0.1.0",
+>>>>>>> feature/persistent-workers
             "request_id": "",
             "status": "ok",
             "findings": findings,
@@ -75,14 +83,22 @@ def handle_request(req):
 
     if req.get("method") == "hello":
         return {
+<<<<<<< HEAD
             "protocol_version": req.get("protocol_version", "1.0.0"),
+=======
+            "protocol_version": req.get("protocol_version", "0.1.0"),
+>>>>>>> feature/persistent-workers
             "request_id": req.get("request_id", ""),
             "status": "ok",
             "findings": [],
         }
 
     return {
+<<<<<<< HEAD
         "protocol_version": req.get("protocol_version", "1.0.0"),
+=======
+        "protocol_version": req.get("protocol_version", "0.1.0"),
+>>>>>>> feature/persistent-workers
         "request_id": req.get("request_id", ""),
         "status": "error",
         "findings": [],
@@ -98,7 +114,11 @@ for line in sys.stdin:
     try:
         req = json.loads(line)
     except Exception as err:
+<<<<<<< HEAD
         respond({"protocol_version": "1.0.0", "request_id": "", "status": "error", "findings": [], "error": str(err)})
+=======
+        respond({"protocol_version": "0.1.0", "request_id": "", "status": "error", "findings": [], "error": str(err)})
+>>>>>>> feature/persistent-workers
         continue
 
     response = handle_request(req)

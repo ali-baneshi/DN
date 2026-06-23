@@ -16,10 +16,17 @@ jobs:
         run: cargo check --workspace
       - name: Build
         run: cargo build --workspace
+<<<<<<< HEAD
       - name: Build C worker
         run: make -C workers/c
       - name: Test
         run: cargo test --workspace
+=======
+      - name: Test
+        run: cargo test --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+>>>>>>> feature/persistent-workers
       - name: Fmt
         run: cargo fmt --all --check
 
@@ -31,4 +38,8 @@ jobs:
       - name: Build C Worker
         run: cd workers/c && make
       - name: Test C Worker
+<<<<<<< HEAD
         run: sh tests/c/run.sh
+=======
+        run: cd workers/c && ./dn-worker-c test_sample.c | jq .
+>>>>>>> feature/persistent-workers

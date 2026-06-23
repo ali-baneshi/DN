@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 
+<<<<<<< HEAD
 pub const PROTOCOL_VERSION: &str = "1.0.0";
+=======
+pub const PROTOCOL_VERSION: &str = "0.1.0";
+>>>>>>> feature/persistent-workers
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkerHello {
@@ -23,6 +27,7 @@ pub struct WorkerAnalyzeFileParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+<<<<<<< HEAD
 pub struct WorkerScanFileParams {
     pub path: String,
     pub language: Option<String>,
@@ -38,10 +43,13 @@ pub enum WorkerParams {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+=======
+>>>>>>> feature/persistent-workers
 pub struct WorkerRequest {
     pub protocol_version: String,
     pub request_id: String,
     pub method: String,
+<<<<<<< HEAD
     pub params: WorkerParams,
 }
 
@@ -50,6 +58,9 @@ pub struct WorkerBatchResult {
     pub path: String,
     #[serde(default)]
     pub findings: Vec<WorkerFinding>,
+=======
+    pub params: WorkerAnalyzeFileParams,
+>>>>>>> feature/persistent-workers
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -60,8 +71,11 @@ pub struct WorkerResponse {
     #[serde(default)]
     pub findings: Vec<WorkerFinding>,
     #[serde(default)]
+<<<<<<< HEAD
     pub results: Vec<WorkerBatchResult>,
     #[serde(default)]
+=======
+>>>>>>> feature/persistent-workers
     pub error: Option<String>,
 }
 
@@ -73,8 +87,11 @@ pub struct WorkerFinding {
     #[serde(default)]
     pub line: Option<u32>,
     #[serde(default)]
+<<<<<<< HEAD
     pub column: Option<u32>,
     #[serde(default)]
+=======
+>>>>>>> feature/persistent-workers
     pub category: Option<String>,
 }
 
