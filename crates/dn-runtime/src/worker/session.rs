@@ -139,7 +139,6 @@ impl WorkerSession {
             request_seq: 0,
         })
     }
-}
 
     pub fn analyze(
         &mut self,
@@ -299,7 +298,7 @@ impl WorkerSession {
         }
 
          Ok(())
-     }
+    }
 
     fn map_findings(source: &str, findings: Vec<WorkerFinding>) -> Vec<Finding> {
         findings
