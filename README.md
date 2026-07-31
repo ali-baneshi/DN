@@ -1,6 +1,5 @@
-# dn-kernel
+dn-kernel
 
-<<<<<<< HEAD
 [![Rust](https://img.shields.io/badge/Rust-CLI%20%26%20runtime-000000?logo=rust)](https://www.rust-lang.org/)
 [![C](https://img.shields.io/badge/C-worker%20for%20kernel%20scans-00599C?logo=c&logoColor=white)](workers/c)
 [![Python](https://img.shields.io/badge/Python-worker-3776AB?logo=python&logoColor=white)](https://www.python.org/)
