@@ -1,10 +1,7 @@
 use std::collections::HashMap;
-<<<<<<< HEAD
 use std::fs;
 use std::path::Path;
 use std::process::{Command, Stdio};
-=======
->>>>>>> feature/persistent-workers
 
 use anyhow::Result;
 
@@ -17,10 +14,7 @@ pub struct WorkerConfig {
     pub args: Vec<String>,
     pub timeout_ms: u64,
     pub retries: u32,
-<<<<<<< HEAD
     pub preflight: Vec<String>,
-=======
->>>>>>> feature/persistent-workers
 }
 
 pub struct WorkerRegistry {
@@ -35,7 +29,6 @@ impl WorkerRegistry {
             sessions: HashMap::new(),
         };
 
-<<<<<<< HEAD
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..")
@@ -98,24 +91,6 @@ impl WorkerRegistry {
                 );
             }
         }
-=======
-        let script_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
-            .join("..")
-            .join("workers")
-            .join("python")
-            .join("dn_worker.py");
-
-        registry.register(
-            "python",
-            WorkerConfig {
-                command: "python".to_string(),
-                args: vec![script_path.to_string_lossy().to_string()],
-                timeout_ms: worker_timeout_ms,
-                retries: worker_retries,
-            },
-        );
->>>>>>> feature/persistent-workers
 
         registry
     }
@@ -142,16 +117,12 @@ impl WorkerRegistry {
                     anyhow::anyhow!("no worker registered for language: {language}")
                 })?;
 
-<<<<<<< HEAD
                 if !worker_script_is_safe(&config.args) {
                     return Err(anyhow::anyhow!(
                         "worker script path is missing or unsafe for language: {language}"
                     ));
                 }
                  let session = WorkerSession::new(&config.command, &config.args, config.timeout_ms)?;
-=======
-                let session = WorkerSession::new(&config.command, &config.args)?;
->>>>>>> feature/persistent-workers
                 self.sessions.insert(language.to_string(), session);
             }
 
@@ -166,24 +137,14 @@ impl WorkerRegistry {
                             .get(language)
                             .map(|cfg| cfg.retries)
                             .unwrap_or(0);
-<<<<<<< HEAD
                          if attempts > retries {
                             return Err(err);
                         }
-=======
-
-                        if attempts > retries + 1 {
-                            return Err(err);
-                        }
-
-                        let _ = retries;
->>>>>>> feature/persistent-workers
                     }
                 }
             }
         }
     }
-<<<<<<< HEAD
 
     pub fn scan_files(
         &mut self,
@@ -262,6 +223,4 @@ fn resolve_worker_binary(binary_path: &Path, candidates: &[&str]) -> Option<Stri
     }
 
     None
-=======
->>>>>>> feature/persistent-workers
 }

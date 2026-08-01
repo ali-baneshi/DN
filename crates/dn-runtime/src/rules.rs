@@ -889,7 +889,7 @@ pub fn analyze_registered_rules(
 pub fn apply_safe_fixes(content: &str, fixes: &[RuleFix]) -> String {
     let mut lines: Vec<String> = content.lines().map(|line| line.to_string()).collect();
     let mut ordered = fixes.to_vec();
-    ordered.sort_by(|a, b| b.line.cmp(&a.line));
+    ordered.sort_by_key(|fix| std::cmp::Reverse(fix.line));
     for fix in ordered {
         let index = fix.line.saturating_sub(1) as usize;
         if index < lines.len() {

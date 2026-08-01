@@ -1,8 +1,5 @@
 pub mod provider;
-<<<<<<< HEAD
 pub mod rules;
-=======
->>>>>>> feature/persistent-workers
 pub mod worker;
 
 use crate::provider::{AiRequest, ProfileAiConfig, ReviewEngine};
@@ -11,10 +8,7 @@ use anyhow::{anyhow, Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 use ignore::WalkBuilder;
 use serde::{Deserialize, Serialize};
-<<<<<<< HEAD
 use sha2::{Digest, Sha256};
-=======
->>>>>>> feature/persistent-workers
 use std::collections::HashSet;
 use std::fs;
 use std::io::Read;
@@ -24,7 +18,6 @@ use std::time::Instant;
 pub use dn_ipc::{WorkerRequest, WorkerResponse};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-<<<<<<< HEAD
 pub struct Diagnostic {
     pub level: String,
     pub source: String,
@@ -70,8 +63,6 @@ pub struct ScanStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-=======
->>>>>>> feature/persistent-workers
 pub struct ScanOptions {
     pub profile_name: String,
     #[serde(default)]
@@ -83,13 +74,10 @@ pub struct ScanOptions {
     #[serde(default)]
     pub max_files: usize,
     #[serde(default)]
-<<<<<<< HEAD
     pub summary_only: bool,
     #[serde(default)]
     pub fast: bool,
     #[serde(default)]
-=======
->>>>>>> feature/persistent-workers
     pub format: OutputFormat,
 }
 
@@ -101,17 +89,13 @@ impl Default for ScanOptions {
             include_content: false,
             python_worker: false,
             max_files: 10_000,
-<<<<<<< HEAD
             summary_only: false,
             fast: false,
-=======
->>>>>>> feature/persistent-workers
             format: OutputFormat::Text,
         }
     }
 }
 
-<<<<<<< HEAD
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CacheEntry {
     size: u64,
@@ -132,8 +116,6 @@ struct ScanCache {
 
 const SCAN_CACHE_VERSION: u32 = 2;
 
-=======
->>>>>>> feature/persistent-workers
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 pub enum OutputFormat {
@@ -226,11 +208,7 @@ pub struct RuntimeProfile {
     pub include_hidden: Option<bool>,
 }
 
-<<<<<<< HEAD
 #[derive(Debug, Clone, Serialize, Deserialize)]
-=======
-#[derive(Debug, Clone)]
->>>>>>> feature/persistent-workers
 pub struct EffectiveProfile {
     pub name: String,
     pub description: String,
@@ -290,13 +268,10 @@ pub struct SeverityStats {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanReport {
-<<<<<<< HEAD
     pub schema_version: String,
     pub metadata: ReportMetadata,
     pub integrations: Integrations,
     pub stats: ScanStats,
-=======
->>>>>>> feature/persistent-workers
     pub root: String,
     pub profile: String,
     pub provider: String,
@@ -315,11 +290,8 @@ pub struct ScanReport {
     pub severity_breakdown: SeverityStats,
     pub duration_ms: u128,
     pub summary: String,
-<<<<<<< HEAD
     #[serde(default)]
     pub diagnostics: Vec<Diagnostic>,
-=======
->>>>>>> feature/persistent-workers
 }
 
 #[derive(Debug)]
@@ -328,7 +300,6 @@ pub enum ProfileSource {
     Loaded(PathBuf),
 }
 
-<<<<<<< HEAD
 pub fn registered_rule_names() -> Vec<&'static str> {
     rules::registered_rule_names()
 }
@@ -368,8 +339,6 @@ pub fn effective_profile(
     Ok((profile.to_effective(), source_label, Vec::new()))
 }
 
-=======
->>>>>>> feature/persistent-workers
 fn default_max_file_size() -> u64 {
     1024 * 1024
 }
@@ -519,13 +488,9 @@ impl RuntimeProfile {
                 }
             },
             file_selection: FileSelectionConfig {
-<<<<<<< HEAD
                 include_hidden: if self.file_selection.include_hidden
                     || self.include_hidden.unwrap_or(false)
                 {
-=======
-                include_hidden: if self.file_selection.include_hidden || self.include_hidden.unwrap_or(false) {
->>>>>>> feature/persistent-workers
                     true
                 } else {
                     parent.file_selection.include_hidden
@@ -580,11 +545,7 @@ impl RuntimeProfile {
             },
             ai: if self.ai.enabled || !self.ai.prompt.is_empty() {
                 if self.ai.enabled {
-<<<<<<< HEAD
                     self.ai.clone()
-=======
-                    self.ai
->>>>>>> feature/persistent-workers
                 } else {
                     parent.ai.clone()
                 }
@@ -611,7 +572,6 @@ impl RuntimeProfile {
         EffectiveProfile {
             name: self.name.clone(),
             description: self.description.clone(),
-<<<<<<< HEAD
             enabled_rules: self.rules.deterministic_rules.clone(),
             suspicious_patterns: self.rules.suspicious_patterns.clone(),
             prioritize_rules: self.rules.prioritize.clone(),
@@ -629,25 +589,6 @@ impl RuntimeProfile {
             ai: self.ai.clone(),
             include_content_preview: self.output.include_content_preview,
             severity_threshold: self.output.severity_threshold.clone(),
-=======
-            enabled_rules: self.rules.deterministic_rules,
-            suspicious_patterns: self.rules.suspicious_patterns,
-            prioritize_rules: self.rules.prioritize,
-            min_severity: self.rules.min_severity,
-            include_hidden: self
-                .include_hidden
-                .unwrap_or(self.file_selection.include_hidden),
-            include_globs: self.file_selection.include_globs,
-            exclude_globs: self.file_selection.exclude_globs,
-            include_binary: self.file_selection.include_binary,
-            limits: self.limits,
-            worker_enabled: self.worker.enabled,
-            worker_timeout_ms: self.worker.timeout_ms,
-            worker_retries: self.worker.retries,
-            ai: self.ai,
-            include_content_preview: self.output.include_content_preview,
-            severity_threshold: self.output.severity_threshold,
->>>>>>> feature/persistent-workers
         }
     }
 }
@@ -658,7 +599,6 @@ fn is_path_hidden(path: &Path) -> bool {
         .is_some_and(|name| name.starts_with('.'))
 }
 
-<<<<<<< HEAD
 fn load_ignore_rules(root: &Path) -> Vec<String> {
     let path = root.join(".dn/ignore");
     fs::read_to_string(path)
@@ -728,7 +668,7 @@ fn save_cache(root: &Path, cache: &ScanCache) {
     if let Ok(raw) = serde_json::to_string(&cache) {
         // Write to temporary file first, then atomically rename
         let temp_path = cache_path(root).with_extension("tmp");
-        if let Ok(_) = fs::write(&temp_path, raw) {
+        if fs::write(&temp_path, raw).is_ok() {
             // Try to sync to disk for durability
             let _ = fs::File::open(&temp_path).and_then(|file| file.sync_all());
             let _ = fs::rename(&temp_path, cache_path(root));
@@ -748,8 +688,6 @@ fn content_cache_hash(content: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-=======
->>>>>>> feature/persistent-workers
 fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
     let base = RuntimeProfile {
         name: name.to_string(),
@@ -852,7 +790,6 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
             },
             ..base
         }),
-<<<<<<< HEAD
         "kernel-c" => Some(RuntimeProfile {
             name: name.to_string(),
             description: "Linux kernel C review profile".to_string(),
@@ -912,8 +849,6 @@ fn builtin_profile(name: &str) -> Option<RuntimeProfile> {
             },
             ..base
         }),
-=======
->>>>>>> feature/persistent-workers
         "ai-generated-code-review" => {
             let mut p = base;
             p.name = name.to_string();
@@ -1069,10 +1004,7 @@ fn detect_language(path: &Path) -> Option<String> {
     match path.extension().and_then(|ext| ext.to_str()) {
         Some("py") => Some("python".to_string()),
         Some("rs") => Some("rust".to_string()),
-<<<<<<< HEAD
         Some("java") => Some("java".to_string()),
-=======
->>>>>>> feature/persistent-workers
         Some("js") => Some("javascript".to_string()),
         Some("ts") => Some("typescript".to_string()),
         Some("tsx") => Some("typescript".to_string()),
@@ -1147,14 +1079,9 @@ fn severity_rank(severity: &str) -> u8 {
 fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
     let mut findings = Vec::new();
     let lower = content.to_lowercase();
-<<<<<<< HEAD
     let is_kernel_profile = profile.name == "kernel-c";
 
     if profile.rules_enabled("todo-comment") && content.contains("TODO") && !is_kernel_profile {
-=======
-
-    if profile.rules_enabled("todo-comment") && content.contains("TODO") {
->>>>>>> feature/persistent-workers
         findings.push(Finding {
             severity: "info".to_string(),
             rule: "todo-comment".to_string(),
@@ -1178,10 +1105,7 @@ fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
 
     if profile.rules_enabled("possible-secret")
         && (lower.contains("password") || lower.contains("secret"))
-<<<<<<< HEAD
         && !is_kernel_profile
-=======
->>>>>>> feature/persistent-workers
     {
         findings.push(Finding {
             severity: "high".to_string(),
@@ -1220,7 +1144,6 @@ fn run_local_rules(content: &str, profile: &EffectiveProfile) -> Vec<Finding> {
     findings
 }
 
-<<<<<<< HEAD
 fn run_local_rules_fast_aware(
     content: &str,
     profile: &EffectiveProfile,
@@ -1260,15 +1183,12 @@ fn run_local_rules_fast_aware(
     findings
 }
 
-=======
->>>>>>> feature/persistent-workers
 fn severity_threshold_met(finding: &Finding, threshold: &str) -> bool {
     let t = severity_rank(normalize_severity(threshold));
     let s = severity_rank(normalize_severity(&finding.severity));
     s >= t
 }
 
-<<<<<<< HEAD
 fn kernel_rule_allowed(finding: &Finding) -> bool {
     matches!(
         finding.rule.as_str(),
@@ -1283,8 +1203,6 @@ fn kernel_rule_allowed(finding: &Finding) -> bool {
     )
 }
 
-=======
->>>>>>> feature/persistent-workers
 impl EffectiveProfile {
     fn rules_enabled(&self, rule: &str) -> bool {
         self.enabled_rules.iter().any(|r| r == rule)
@@ -1318,7 +1236,6 @@ fn is_included(path: &Path, include: &GlobSet, exclude: &GlobSet) -> bool {
     include.is_match(rel.as_ref()) && !exclude.is_match(rel.as_ref())
 }
 
-<<<<<<< HEAD
 fn adapt_kernel_profile_for_subtree(profile: &mut EffectiveProfile, root: &Path) {
     if profile.name != "kernel-c" {
         return;
@@ -1340,8 +1257,6 @@ fn adapt_kernel_profile_for_subtree(profile: &mut EffectiveProfile, root: &Path)
     }
 }
 
-=======
->>>>>>> feature/persistent-workers
 fn profile_path_candidates(root: &Path, name: &str) -> Vec<PathBuf> {
     [("toml"), ("yaml"), ("yml")]
         .into_iter()
@@ -1349,7 +1264,6 @@ fn profile_path_candidates(root: &Path, name: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-<<<<<<< HEAD
 fn is_profile_name_safe(name: &str) -> bool {
     if name.is_empty() {
         return false;
@@ -1372,8 +1286,6 @@ fn is_profile_path_safe(path: &Path) -> bool {
     !path.components().any(|c| matches!(c, Component::ParentDir))
 }
 
-=======
->>>>>>> feature/persistent-workers
 fn load_profile_file(path: &Path) -> Result<RuntimeProfile> {
     let raw = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
     if path
@@ -1391,20 +1303,14 @@ fn load_profile_file(path: &Path) -> Result<RuntimeProfile> {
     Ok(profile)
 }
 
-<<<<<<< HEAD
 const MAX_PROFILE_INHERITANCE_DEPTH: usize = 8;
 
-=======
->>>>>>> feature/persistent-workers
 fn resolve_profile_from_file(
     path: &Path,
     root: &Path,
     seen: &mut HashSet<PathBuf>,
     seen_names: &mut HashSet<String>,
-<<<<<<< HEAD
     visited: usize,
-=======
->>>>>>> feature/persistent-workers
 ) -> Result<(RuntimeProfile, ProfileSource)> {
     let canonical = path
         .canonicalize()
@@ -1415,7 +1321,6 @@ fn resolve_profile_from_file(
             path.display()
         ));
     }
-<<<<<<< HEAD
     if visited >= MAX_PROFILE_INHERITANCE_DEPTH {
         return Err(anyhow!(
             "profile inheritance depth exceeded (max {}): '{}'",
@@ -1423,8 +1328,6 @@ fn resolve_profile_from_file(
             path.display()
         ));
     }
-=======
->>>>>>> feature/persistent-workers
 
     let manifest = load_profile_file(&canonical)?;
     let mut profile = manifest;
@@ -1439,7 +1342,6 @@ fn resolve_profile_from_file(
     seen.insert(canonical.clone());
     seen_names.insert(profile.name.clone());
 
-<<<<<<< HEAD
     if let Some(ref inherits) = profile.inherits {
         if !is_profile_name_safe(inherits) {
             return Err(anyhow!(
@@ -1449,19 +1351,13 @@ fn resolve_profile_from_file(
         }
     }
 
-=======
->>>>>>> feature/persistent-workers
     if let Some(inherits) = profile.inherits.clone() {
         let base_profile = if let Some(base_path) =
             profile_path_candidates(&root.join(".dn/profiles"), &inherits)
                 .into_iter()
                 .find(|candidate| candidate.exists())
         {
-<<<<<<< HEAD
             let (base, _) = resolve_profile_from_file(&base_path, root, seen, seen_names, visited + 1)?;
-=======
-            let (base, _) = resolve_profile_from_file(&base_path, root, seen, seen_names)?;
->>>>>>> feature/persistent-workers
             base
         } else if let Some(profile) = builtin_profile(&inherits) {
             profile
@@ -1512,7 +1408,6 @@ pub fn available_profiles(root: &Path) -> Vec<String> {
 }
 
 pub fn load_profile(name_or_path: &str, root: &Path) -> Result<(RuntimeProfile, ProfileSource)> {
-<<<<<<< HEAD
     // Validate path safety first to avoid leaking existence information
     if Path::new(name_or_path).exists() {
         let path = Path::new(name_or_path);
@@ -1540,19 +1435,6 @@ pub fn load_profile(name_or_path: &str, root: &Path) -> Result<(RuntimeProfile, 
         ));
     }
 
-=======
-    if Path::new(name_or_path).exists() {
-        let mut seen = HashSet::new();
-        let mut seen_names = HashSet::new();
-        return resolve_profile_from_file(
-            Path::new(name_or_path),
-            root,
-            &mut seen,
-            &mut seen_names,
-        );
-    }
-
->>>>>>> feature/persistent-workers
     let profile_dir = root.join(".dn/profiles");
     if let Some(file) = profile_path_candidates(&profile_dir, name_or_path)
         .into_iter()
@@ -1560,11 +1442,7 @@ pub fn load_profile(name_or_path: &str, root: &Path) -> Result<(RuntimeProfile, 
     {
         let mut seen = HashSet::new();
         let mut seen_names = HashSet::new();
-<<<<<<< HEAD
         return resolve_profile_from_file(&file, root, &mut seen, &mut seen_names, 0);
-=======
-        return resolve_profile_from_file(&file, root, &mut seen, &mut seen_names);
->>>>>>> feature/persistent-workers
     }
 
     if let Some(profile) = builtin_profile(name_or_path) {
@@ -1584,10 +1462,7 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
     let (base_profile, source) =
         load_profile(&options.profile_name, root).context("load profile")?;
     let mut profile = base_profile.to_effective();
-<<<<<<< HEAD
     adapt_kernel_profile_for_subtree(&mut profile, &root_path);
-=======
->>>>>>> feature/persistent-workers
     if options.include_hidden {
         profile.include_hidden = true;
     }
@@ -1601,11 +1476,8 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         ProfileSource::Builtin => "builtin".to_string(),
         ProfileSource::Loaded(path) => format!("file:{}", path.display()),
     };
-<<<<<<< HEAD
     let ignore_rules = load_ignore_rules(&root_path);
     let mut cache = load_cache(&root_path);
-=======
->>>>>>> feature/persistent-workers
 
     let (include_set, exclude_set) = build_selectors(&profile).context("build selector")?;
     let mut walk = WalkBuilder::new(&root_path);
@@ -1621,7 +1493,6 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
     let mut skipped_large_files = 0usize;
     let mut truncated = false;
     let mut errors = Vec::new();
-<<<<<<< HEAD
     let mut worker_mode = if options.fast {
         "disabled (fast)".to_string()
     } else {
@@ -1637,13 +1508,6 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                 worker_mode = "c (single-shot)".to_string();
             }
         } else if let Some(cfg) = registry.get("python") {
-=======
-    let mut worker_mode = "disabled".to_string();
-
-    let mut worker_registry = if profile.worker_enabled {
-        let registry = WorkerRegistry::new(profile.worker_timeout_ms, profile.worker_retries);
-        if let Some(cfg) = registry.get("python") {
->>>>>>> feature/persistent-workers
             if cfg.retries > 0 {
                 worker_mode = "python".to_string();
             } else {
@@ -1658,12 +1522,9 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
 
     let mut ai_files_used = 0usize;
 
-<<<<<<< HEAD
     let mut pending_batch_c: Vec<(String, String)> = Vec::new();
     let mut pending_batch_indexes: Vec<usize> = Vec::new();
 
-=======
->>>>>>> feature/persistent-workers
     for entry in walk.build() {
         if total_files_scanned >= profile.limits.max_files
             || total_bytes >= profile.limits.max_total_bytes
@@ -1706,12 +1567,9 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         if !is_included(relative, &include_set, &exclude_set) {
             continue;
         }
-<<<<<<< HEAD
         if is_ignored_by_rules(relative, &ignore_rules) {
             continue;
         }
-=======
->>>>>>> feature/persistent-workers
 
         files_discovered += 1;
 
@@ -1744,7 +1602,6 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         total_bytes = total_bytes.saturating_add(size);
 
         let rel_path = relative.to_string_lossy().to_string();
-<<<<<<< HEAD
         let modified = metadata
             .modified()
             .ok()
@@ -1811,40 +1668,17 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                                 Ok(worker_findings) => {
                                     files[file_index].findings.extend(worker_findings)
                                 }
-=======
-        let mut findings = Vec::new();
-
-        match read_text_preview(&path, profile.limits.max_file_read_bytes) {
-            Ok(content) => {
-                findings.extend(run_local_rules(&content, &profile));
-
-                let suspicious = profile
-                    .suspicious_patterns
-                    .iter()
-                    .any(|pat| content.to_lowercase().contains(&pat.to_lowercase()));
-
-                if profile.worker_enabled && suspicious {
-                    let language = detect_language(&path).unwrap_or_else(|| "unknown".to_string());
-                    if let Some(registry) = worker_registry.as_mut() {
-                        if registry.supports(&language) {
-                            match registry.analyze(&language, &rel_path, &content) {
-                                Ok(worker_findings) => findings.extend(worker_findings),
->>>>>>> feature/persistent-workers
                                 Err(err) => errors.push(format!("worker {}: {err}", rel_path)),
                             }
                         }
                     }
                 }
 
-<<<<<<< HEAD
                 if profile.ai.enabled
                     && ai_files_used < profile.ai.max_ai_files
                     && suspicious
                     && !options.fast
                 {
-=======
-                if profile.ai.enabled && ai_files_used < profile.ai.max_ai_files && suspicious {
->>>>>>> feature/persistent-workers
                     match review_engine.analyze_file_if_enabled(
                         &profile.ai,
                         AiRequest {
@@ -1855,18 +1689,13 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
                         },
                     ) {
                         Ok(ai_findings) => {
-<<<<<<< HEAD
                             files[file_index].findings.extend(ai_findings);
-=======
-                            findings.extend(ai_findings);
->>>>>>> feature/persistent-workers
                             ai_files_used += 1;
                         }
                         Err(err) => errors.push(format!("ai provider {}: {err}", profile.name)),
                     }
                 }
 
-<<<<<<< HEAD
                 files[file_index].findings.sort_by(|a, b| {
                     severity_rank(normalize_severity(&b.severity))
                         .cmp(&severity_rank(normalize_severity(&a.severity)))
@@ -1937,34 +1766,6 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         }
     }
     save_cache(&root_path, &cache);
-=======
-                findings.retain(|finding| {
-                    profile.prioritize_rules.contains(&finding.rule)
-                        || severity_threshold_met(finding, &profile.severity_threshold)
-                });
-
-                findings.sort_by(|a, b| {
-                    severity_rank(normalize_severity(&b.severity))
-                        .cmp(&severity_rank(normalize_severity(&a.severity)))
-                });
-            }
-            Err(err) => errors.push(format!("read {}: {err}", rel_path)),
-        }
-
-        let content_preview = if options.include_content || profile.include_content_preview {
-            read_text_preview(&path, 1024).ok()
-        } else {
-            None
-        };
-
-        files.push(FileEntry {
-            path: rel_path,
-            size,
-            findings,
-            content_preview,
-        });
-    }
->>>>>>> feature/persistent-workers
 
     let files_selected = files.len();
     let mut severity = SeverityStats {
@@ -1990,16 +1791,11 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         severity.info + severity.low + severity.medium + severity.high + severity.critical;
     let files_skipped = files_discovered.saturating_sub(files_selected);
     let worker_summary = if profile.worker_enabled {
-<<<<<<< HEAD
         worker_mode.clone()
-=======
-        format!("python:{worker_mode}")
->>>>>>> feature/persistent-workers
     } else {
         "disabled".to_string()
     };
 
-<<<<<<< HEAD
     let diagnostics: Vec<Diagnostic> = errors
         .iter()
         .map(|message| Diagnostic {
@@ -2044,9 +1840,6 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
             files_skipped,
             severity_breakdown: severity.clone(),
         },
-=======
-    Ok(ScanReport {
->>>>>>> feature/persistent-workers
         root: root_path.to_string_lossy().to_string(),
         profile: profile.name.clone(),
         provider: format!("{}@{}", review_engine.provider_name(), profile_source),
@@ -2054,32 +1847,21 @@ pub fn scan_repository(root: impl AsRef<Path>, options: &ScanOptions) -> Result<
         profile_source: profile_source.clone(),
         files_discovered,
         files_scanned: total_files_scanned,
-<<<<<<< HEAD
         files_selected: if options.summary_only { 0 } else { files_selected },
-=======
-        files_selected,
->>>>>>> feature/persistent-workers
         files_skipped,
         total_files: files_discovered,
         total_bytes,
         skipped_large_files,
         truncated,
         errors,
-<<<<<<< HEAD
         files: if options.summary_only { Vec::new() } else { files },
-=======
-        files,
->>>>>>> feature/persistent-workers
         severity_breakdown: severity,
         duration_ms: start.elapsed().as_millis(),
         summary: format!(
             "Scanned {files_discovered} files ({total_files_scanned} scanned), {total_findings} findings in {}ms",
             start.elapsed().as_millis()
         ),
-<<<<<<< HEAD
         diagnostics,
-=======
->>>>>>> feature/persistent-workers
     })
 }
 
@@ -2117,11 +1899,7 @@ mod tests {
     fn builtin_profile_exists() {
         let (profile, _) = load_profile("quick", Path::new(".")).unwrap();
         assert_eq!(profile.name, "quick");
-<<<<<<< HEAD
         assert!(!profile.worker.enabled || profile.limits.max_files > 0);
-=======
-        assert!(profile.worker.enabled == false || profile.limits.max_files > 0);
->>>>>>> feature/persistent-workers
     }
 
     #[test]
@@ -2338,7 +2116,6 @@ include_binary = true
         .unwrap();
 
         assert_eq!(report.files.len(), 1);
-<<<<<<< HEAD
         assert!(
             report.worker == "python"
                 || report.worker == "python (single-shot)"
@@ -2346,9 +2123,6 @@ include_binary = true
                 || report.worker == "c-batch"
                 || report.worker == "c (single-shot)"
         );
-=======
-        assert!(report.worker.starts_with("python:"));
->>>>>>> feature/persistent-workers
         assert!(
             report.errors.is_empty(),
             "unexpected scan errors: {:?}",

@@ -28,7 +28,6 @@ fn temp_dir(prefix: &str) -> PathBuf {
 fn cli_unknown_profile_prints_error_and_non_zero() {
     let dir = temp_dir("unknown-profile");
     let output = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
-<<<<<<< HEAD
         .args(["scan", dir.to_str().unwrap(), "--profile", "missing"])
         .output()
         .unwrap();
@@ -46,34 +45,20 @@ fn cli_malformed_profile_is_clean_error() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
         .args(["scan", dir.to_str().unwrap(), "--profile", "bad"])
-=======
-        .args(["scan", dir.to_str().unwrap(), "--profile", "does-not-exist"])
->>>>>>> feature/persistent-workers
         .output()
         .unwrap();
 
     assert!(!output.status.success());
     let stderr = String::from_utf8(output.stderr).unwrap();
     assert!(stderr.contains("error:"));
-<<<<<<< HEAD
-=======
-    assert!(stderr.contains("available profiles"));
->>>>>>> feature/persistent-workers
 }
 
 #[test]
 fn cli_scan_and_review_aliases_match_json_shape() {
-<<<<<<< HEAD
     let dir = temp_dir("alias-shape");
     write(&dir, "main.rs", "fn main() { println!(\"hi\"); }\n");
 
     let scan = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
-=======
-    let dir = temp_dir("scan-review-alias");
-    write(&dir, "main.rs", "fn main() {}\n");
-
-    let scan_out = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
->>>>>>> feature/persistent-workers
         .args([
             "scan",
             dir.to_str().unwrap(),
@@ -83,11 +68,7 @@ fn cli_scan_and_review_aliases_match_json_shape() {
         ])
         .output()
         .unwrap();
-<<<<<<< HEAD
     let review = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
-=======
-    let review_out = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
->>>>>>> feature/persistent-workers
         .args([
             "review",
             dir.to_str().unwrap(),
@@ -98,7 +79,6 @@ fn cli_scan_and_review_aliases_match_json_shape() {
         .output()
         .unwrap();
 
-<<<<<<< HEAD
     assert!(scan.status.success());
     assert!(review.status.success());
     let scan_value: serde_json::Value = serde_json::from_slice(&scan.stdout).unwrap();
@@ -210,17 +190,6 @@ fn cli_validate_profile_and_doctor_work() {
     assert!(doctor.status.success());
     let doctor_value: serde_json::Value = serde_json::from_slice(&doctor.stdout).unwrap();
     assert!(doctor_value["diagnostics"].is_array());
-=======
-    assert!(scan_out.status.success());
-    assert!(review_out.status.success());
-    assert!(String::from_utf8(scan_out.stdout)
-        .unwrap()
-        .contains("\"profile\""));
-    assert!(String::from_utf8(review_out.stdout)
-        .unwrap()
-        .contains("\"profile\""));
-    assert_eq!(scan_out.status.code(), review_out.status.code());
->>>>>>> feature/persistent-workers
 }
 
 #[test]
@@ -261,7 +230,6 @@ max_files = 20
         .unwrap();
 
     assert!(with_worker.status.success());
-<<<<<<< HEAD
     let value: serde_json::Value = serde_json::from_slice(&with_worker.stdout).unwrap();
     assert_eq!(value["integrations"]["worker"]["enabled"], true);
 }
@@ -282,11 +250,6 @@ fn c_worker_golden_tests_pass() {
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-=======
-    let text = String::from_utf8(with_worker.stdout).unwrap();
-    assert!(text.contains("\"worker\""));
-    assert!(text.contains("python"));
->>>>>>> feature/persistent-workers
 }
 
 #[test]
@@ -315,27 +278,14 @@ include_hidden = true
         .unwrap();
 
     assert!(output.status.success());
-<<<<<<< HEAD
     let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(value["metadata"]["profile"], "my-security");
-=======
-    let text = String::from_utf8(output.stdout).unwrap();
-    let value: serde_json::Value = serde_json::from_str(&text).unwrap();
-    assert_eq!(value["profile"], "my-security");
-    let profile_source = value["profile_source"].as_str().unwrap_or("");
-    assert!(profile_source.starts_with("file:"));
-    assert!(text.contains(".env"));
->>>>>>> feature/persistent-workers
 }
 
 #[test]
 fn cli_markdown_output_is_renderable() {
     let dir = temp_dir("markdown-cli");
-<<<<<<< HEAD
     write(&dir, "main.rs", "fn main() { println!(\"hello\"); }\n");
-=======
-    write(&dir, "main.rs", "fn main() {}\n");
->>>>>>> feature/persistent-workers
 
     let output = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
         .args([
@@ -351,11 +301,7 @@ fn cli_markdown_output_is_renderable() {
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(text.contains("dn-kernel Review Report"));
-<<<<<<< HEAD
     assert!(text.contains("Execution Summary"));
-=======
-    assert!(text.contains("Files discovered"));
->>>>>>> feature/persistent-workers
     assert!(text.contains("Profile: `quick`"));
 }
 
@@ -399,11 +345,7 @@ fn cli_markdown_reports_empty_findings_cleanly() {
 
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
-<<<<<<< HEAD
     assert!(text.contains("No findings") || text.contains("dn-kernel Review Report"));
-=======
-    assert!(text.contains("*No findings were reported for the current profile."));
->>>>>>> feature/persistent-workers
 }
 
 #[test]
@@ -425,7 +367,6 @@ fn cli_content_preview_is_present_when_requested() {
 
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
-<<<<<<< HEAD
     assert!(text.contains("content_preview"));
 }
 
@@ -447,9 +388,6 @@ fn cli_hidden_default_skips_hidden_paths() {
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(!text.contains(".env"));
-=======
-    assert!(text.contains("\"content_preview\""));
->>>>>>> feature/persistent-workers
 }
 
 #[test]
@@ -474,7 +412,6 @@ fn cli_hidden_flag_includes_hidden_paths() {
         .unwrap();
     assert!(hidden.status.success());
     let text = String::from_utf8(hidden.stdout).unwrap();
-<<<<<<< HEAD
     assert!(text.contains(".env") || text.contains(".hiddendir"));
 }
 
@@ -497,26 +434,10 @@ fn cli_fix_dry_run_reports_fixable_files() {
     let output = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
         .args([
             "fix",
-=======
-    assert!(text.contains(".env"));
-    assert!(text.contains(".hiddendir/secret.txt"));
-}
-
-#[test]
-fn cli_hidden_default_skips_hidden_paths() {
-    let dir = temp_dir("cli-hidden-default");
-    write(&dir, "visible.txt", "todo");
-    write(&dir, ".env", "password=shh\n");
-
-    let visible_only = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
-        .args([
-            "scan",
->>>>>>> feature/persistent-workers
             dir.to_str().unwrap(),
             "--profile",
             "quick",
             "--json",
-<<<<<<< HEAD
             "--dry-run",
         ])
         .output()
@@ -559,13 +480,10 @@ max_files = 20
             "--profile",
             "ts-worker",
             "--json",
-=======
->>>>>>> feature/persistent-workers
         ])
         .output()
         .unwrap();
 
-<<<<<<< HEAD
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(text.contains("ts-dom-xss"));
@@ -643,29 +561,4 @@ fn cli_fix_applies_additional_safe_cleanup_rules() {
     );
     assert!(!updated.contains("# if (flag) { doThing(); }"));
     assert!(!updated.contains("print('debug')"));
-=======
-    assert!(visible_only.status.success());
-    let text = String::from_utf8(visible_only.stdout).unwrap();
-    assert!(!text.contains(".env"));
-}
-
-#[test]
-fn cli_malformed_profile_is_clean_error() {
-    let dir = temp_dir("malformed-profile-cli");
-    let profile_dir = dir.join(".dn/profiles");
-    fs::create_dir_all(&profile_dir).unwrap();
-    fs::write(profile_dir.join("bad.toml"), "name = bad").unwrap();
-
-    let output = Command::new(env!("CARGO_BIN_EXE_dn-cli"))
-        .args(["scan", dir.to_str().unwrap(), "--profile", "bad", "--json"])
-        .output()
-        .unwrap();
-
-    assert!(!output.status.success());
-    let stderr = String::from_utf8(output.stderr).unwrap();
-    assert!(
-        stderr.contains("error:")
-            && (stderr.contains("parse toml profile") || stderr.contains("parse yaml profile"))
-    );
->>>>>>> feature/persistent-workers
 }

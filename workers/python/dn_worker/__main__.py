@@ -3,11 +3,7 @@ import json
 import sys
 
 
-<<<<<<< HEAD
 PROTOCOL_VERSION = "1.0.0"
-=======
-PROTOCOL_VERSION = "0.1.0"
->>>>>>> feature/persistent-workers
 
 
 def analyze(content):

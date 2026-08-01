@@ -2,7 +2,6 @@
 
 ## [Unreleased]
 
-<<<<<<< HEAD
 ## [1.0.0] - 2026-05-19
 
 ### Added
@@ -52,11 +51,6 @@
 
 - JSON automation consumers should migrate to schema version `2`.
 - `ollama` remains experimental; `mock` remains testing-only.
-=======
-- Release readiness polish pass in progress.
-- Continue aligning CLI/help/docs with runtime behavior.
-- Stabilize public report shape and extension documentation.
->>>>>>> feature/persistent-workers
 
 ## [0.1.0] - 2026-05-14
 
@@ -66,7 +60,3 @@
 - Add deterministic/local + suspicious/AI-style provider pipeline.
 - Add plain-text, JSON, and Markdown output formats.
 - Add robust tests for hidden files, profile loading, worker path, and errors.
-<<<<<<< HEAD
-=======
-
->>>>>>> feature/persistent-workers

@@ -1,6 +1,5 @@
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
-<<<<<<< HEAD
 use std::thread;
 use std::time::Duration;
 
@@ -95,14 +94,6 @@ fn truncate_field(s: &str, max_len: usize) -> String {
     }
 }
 
-=======
-
-use anyhow::{anyhow, Result};
-use dn_ipc::{WorkerFinding, WorkerRequest, PROTOCOL_VERSION};
-
-use crate::Finding;
-
->>>>>>> feature/persistent-workers
 pub struct WorkerSession {
     _child: Child,
     stdin: BufWriter<ChildStdin>,
@@ -112,22 +103,15 @@ pub struct WorkerSession {
 }
 
 impl WorkerSession {
-<<<<<<< HEAD
     pub fn new(command: &str, args: &[String], timeout_ms: u64) -> Result<Self> {
-=======
-    pub fn new(command: &str, args: &[String]) -> Result<Self> {
->>>>>>> feature/persistent-workers
         let mut child = Command::new(command)
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-<<<<<<< HEAD
             // SECURITY: Prevent the worker from inheriting unnecessary environment variables
             .env_clear()
             .env("PATH", std::env::var("PATH").unwrap_or_default())
-=======
->>>>>>> feature/persistent-workers
             .spawn()?;
 
         let stdin = child
@@ -140,16 +124,16 @@ impl WorkerSession {
             .take()
             .ok_or_else(|| anyhow!("worker stdout unavailable"))?;
 
-<<<<<<< HEAD
-        // Spawn a timeout thread to kill the process if it runs too long
-        let timeout_child = child.clone();
+        // Spawn a timeout thread to kill the process if it runs too long.
+        // Child is not Clone; kill by pid instead.
+        let pid = child.id();
         thread::spawn(move || {
             thread::sleep(Duration::from_millis(timeout_ms));
-            let _ = timeout_child.kill();
+            let _ = Command::new("kill")
+                .args(["-KILL", &pid.to_string()])
+                .output();
         });
 
-=======
->>>>>>> feature/persistent-workers
         Ok(Self {
             _child: child,
             stdin: BufWriter::new(stdin),
@@ -176,19 +160,11 @@ impl WorkerSession {
             protocol_version: PROTOCOL_VERSION.to_string(),
             request_id: request_id.clone(),
             method: "analyze_file".to_string(),
-<<<<<<< HEAD
             params: WorkerParams::AnalyzeFile(WorkerAnalyzeFileParams {
                 path: path.to_string(),
                 language: language.map(str::to_string),
                 content: content.to_string(),
             }),
-=======
-            params: dn_ipc::WorkerAnalyzeFileParams {
-                path: path.to_string(),
-                language: language.map(str::to_string),
-                content: content.to_string(),
-            },
->>>>>>> feature/persistent-workers
         };
 
         let payload = serde_json::to_string(&request)?;
@@ -199,15 +175,8 @@ impl WorkerSession {
             .flush()
             .map_err(|err| anyhow!("failed to flush request: {err}"))?;
 
-<<<<<<< HEAD
         // SECURITY: Use bounded read to prevent memory exhaustion from malicious worker
         let line = read_bounded_line(&mut self.stdout, MAX_WORKER_RESPONSE_BYTES)?;
-=======
-        let mut line = String::new();
-        self.stdout
-            .read_line(&mut line)
-            .map_err(|err| anyhow!("failed reading worker response: {err}"))?;
->>>>>>> feature/persistent-workers
 
         if line.trim().is_empty() {
             return Err(anyhow!("empty worker response"));
@@ -215,7 +184,6 @@ impl WorkerSession {
 
         let response: dn_ipc::WorkerResponse = serde_json::from_str(&line)
             .map_err(|err| anyhow!("failed parsing worker response: {err}"))?;
-<<<<<<< HEAD
         if response.protocol_version != PROTOCOL_VERSION {
             return Err(anyhow!(
                 "unexpected worker protocol version: expected {}, got {}",
@@ -223,8 +191,6 @@ impl WorkerSession {
                 response.protocol_version
             ));
         }
-=======
->>>>>>> feature/persistent-workers
         if response.request_id != request_id {
             return Err(anyhow!(
                 "unexpected worker response id: expected {}, got {}",
@@ -239,8 +205,7 @@ impl WorkerSession {
                 .unwrap_or_else(|| "worker returned non-ok status".to_string())));
         }
 
-<<<<<<< HEAD
-        Ok(map_findings("worker", response.findings))
+        Ok(Self::map_findings("worker", response.findings))
     }
 
     pub fn scan_files(
@@ -294,20 +259,7 @@ impl WorkerSession {
         Ok(response
             .results
             .into_iter()
-            .map(|entry| (entry.path, map_findings("worker:c", entry.findings)))
-=======
-        Ok(response
-            .findings
-            .into_iter()
-            .map(|finding: WorkerFinding| Finding {
-                severity: finding.severity,
-                rule: finding.rule,
-                message: finding.message,
-                category: finding.category,
-                line: finding.line,
-                source: Some("worker:python".to_string()),
-            })
->>>>>>> feature/persistent-workers
+            .map(|entry| (entry.path, Self::map_findings("worker:c", entry.findings)))
             .collect())
     }
 
@@ -326,7 +278,6 @@ impl WorkerSession {
             .flush()
             .map_err(|err| anyhow!("failed to flush worker hello: {err}"))?;
 
-<<<<<<< HEAD
         // SECURITY: Use bounded read for handshake response too
         let line = read_bounded_line(&mut self.stdout, MAX_WORKER_RESPONSE_BYTES)?;
 
@@ -339,15 +290,6 @@ impl WorkerSession {
                 response.protocol_version
             ));
         }
-=======
-        let mut line = String::new();
-        self.stdout
-            .read_line(&mut line)
-            .map_err(|err| anyhow!("failed reading worker hello response: {err}"))?;
-
-        let response: dn_ipc::WorkerResponse = serde_json::from_str(&line)
-            .map_err(|err| anyhow!("failed parsing worker hello response: {err}"))?;
->>>>>>> feature/persistent-workers
 
         if response.status != "ok" {
             return Err(anyhow!(
@@ -358,7 +300,6 @@ impl WorkerSession {
             ));
         }
 
-<<<<<<< HEAD
          Ok(())
     }
 
@@ -377,8 +318,3 @@ impl WorkerSession {
             .collect()
       }
    }
-=======
-        Ok(())
-    }
-}
->>>>>>> feature/persistent-workers

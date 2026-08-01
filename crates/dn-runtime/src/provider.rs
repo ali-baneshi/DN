@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::Finding;
 
-<<<<<<< HEAD
 const ALLOWED_OLLAMA_HOSTS: [&str; 3] = ["localhost", "127.0.0.1", "::1"];
 
 fn validate_ollama_base_url(url: &str) -> Result<String> {
@@ -41,8 +40,6 @@ fn validate_ollama_base_url(url: &str) -> Result<String> {
     Ok(trimmed.to_string())
 }
 
-=======
->>>>>>> feature/persistent-workers
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
@@ -158,16 +155,10 @@ impl Provider {
 }
 
 fn analyze_with_ollama(provider: &OllamaProvider, request: &AiRequest) -> Result<Vec<Finding>> {
-<<<<<<< HEAD
     let base_url = validate_ollama_base_url(&provider.base_url)?;
     let url = format!(
         "{}/api/chat/completions",
         base_url.trim_end_matches('/')
-=======
-    let url = format!(
-        "{}/api/chat/completions",
-        provider.base_url.trim_end_matches('/')
->>>>>>> feature/persistent-workers
     );
     let system_prompt = format!(
         "You are a strict code reviewer for local repository review. Return JSON only.\n\nProfile: {}\n{}",
